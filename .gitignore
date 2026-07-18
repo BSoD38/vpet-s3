@@ -1,0 +1,26 @@
+# --- ESP-IDF build output ---
+/build/
+
+# --- Generated SDK config ---
+# Regenerated from sdkconfig.defaults by `idf.py set-target` / build.
+# sdkconfig.defaults IS tracked (it holds the intentional config).
+/sdkconfig
+/sdkconfig.old
+
+# --- Managed components ---
+# Re-fetched from idf_component.yml + dependencies.lock on first build
+# (needs network once). dependencies.lock IS tracked (pins versions).
+/managed_components/
+
+# --- IDE / machine-specific ---
+# .vscode/settings.json holds absolute toolchain paths for this machine.
+/.vscode/
+
+# --- Python bytecode (tools/) ---
+__pycache__/
+*.pyc
+
+# --- OS / editor cruft ---
+.DS_Store
+Thumbs.db
+*.swp

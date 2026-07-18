@@ -1,0 +1,22 @@
+{
+  "name": "Rollo",
+  "tier": 4,
+  "base": {
+    "hp": 300,
+    "str": 20,
+    "end": 28,
+    "agi": 12,
+    "int": 14
+  },
+  "needs": {
+    "hungerPerHr": 9,
+    "happyPerHr": 9,
+    "poopIntervalS": 10800,
+    "sleepStart": 21,
+    "sleepEnd": 6
+  },
+  "minStageSecs": 1000000000,
+  "sprite": "sprite.png",
+  "evolutions": [],
+  "id": "rollo"
+}

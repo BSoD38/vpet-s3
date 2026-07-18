@@ -1,0 +1,6 @@
+dependencies:
+  idf: ">=5.0"
+  chmorgan/esp-audio-player: "==1.0.7"
+  chmorgan/esp-libhelix-mp3: "==1.0.3"
+  espressif/cjson: "*"   # cJSON moved out of IDF core in 6.x; used to parse creature configs
+# LovyanGFX is vendored as a local component in components/LovyanGFX (auto-discovered).

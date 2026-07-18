@@ -1,0 +1,30 @@
+{
+  "name": "Sparky",
+  "tier": 3,
+  "base": {
+    "hp": 90,
+    "str": 10,
+    "end": 8,
+    "agi": 16,
+    "int": 9
+  },
+  "needs": {
+    "hungerPerHr": 12,
+    "happyPerHr": 13,
+    "poopIntervalS": 9000,
+    "sleepStart": 23,
+    "sleepEnd": 6
+  },
+  "minStageSecs": 172800,
+  "sprite": "sprite.png",
+  "evolutions": [
+    {
+      "to": "boltor",
+      "minAgi": 120
+    },
+    {
+      "to": "rollo"
+    }
+  ],
+  "id": "sparky"
+}

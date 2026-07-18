@@ -1,0 +1,30 @@
+{
+  "name": "Tubbo",
+  "tier": 3,
+  "base": {
+    "hp": 130,
+    "str": 9,
+    "end": 15,
+    "agi": 6,
+    "int": 7
+  },
+  "needs": {
+    "hungerPerHr": 8,
+    "happyPerHr": 10,
+    "poopIntervalS": 7200,
+    "sleepStart": 21,
+    "sleepEnd": 7
+  },
+  "minStageSecs": 172800,
+  "sprite": "sprite.png",
+  "evolutions": [
+    {
+      "to": "boltor",
+      "minAgi": 120
+    },
+    {
+      "to": "rollo"
+    }
+  ],
+  "id": "tubbo"
+}

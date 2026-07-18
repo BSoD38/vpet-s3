@@ -1,0 +1,26 @@
+{
+  "name": "Egg",
+  "tier": 0,
+  "base": {
+    "hp": 0,
+    "str": 0,
+    "end": 0,
+    "agi": 0,
+    "int": 0
+  },
+  "needs": {
+    "hungerPerHr": 0,
+    "happyPerHr": 0,
+    "poopIntervalS": 1000000000.0,
+    "sleepStart": 0,
+    "sleepEnd": 0
+  },
+  "minStageSecs": 120,
+  "sprite": "sprite.png",
+  "evolutions": [
+    {
+      "to": "nibbling"
+    }
+  ],
+  "id": "egg"
+}

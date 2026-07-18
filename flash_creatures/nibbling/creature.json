@@ -1,0 +1,26 @@
+{
+  "name": "Nibbling",
+  "tier": 1,
+  "base": {
+    "hp": 30,
+    "str": 4,
+    "end": 4,
+    "agi": 5,
+    "int": 4
+  },
+  "needs": {
+    "hungerPerHr": 10,
+    "happyPerHr": 12,
+    "poopIntervalS": 10800,
+    "sleepStart": 22,
+    "sleepEnd": 7
+  },
+  "minStageSecs": 300,
+  "sprite": "sprite.png",
+  "evolutions": [
+    {
+      "to": "chirp"
+    }
+  ],
+  "id": "nibbling"
+}

@@ -1,0 +1,22 @@
+{
+  "name": "Boltor",
+  "tier": 4,
+  "base": {
+    "hp": 220,
+    "str": 22,
+    "end": 16,
+    "agi": 30,
+    "int": 18
+  },
+  "needs": {
+    "hungerPerHr": 14,
+    "happyPerHr": 11,
+    "poopIntervalS": 10800,
+    "sleepStart": 23,
+    "sleepEnd": 6
+  },
+  "minStageSecs": 1000000000,
+  "sprite": "sprite.png",
+  "evolutions": [],
+  "id": "boltor"
+}
