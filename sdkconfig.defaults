@@ -2,14 +2,6 @@ CONFIG_SPIRAM=y
 CONFIG_SPIRAM_MODE_OCT=y
 CONFIG_SPIRAM_SPEED_80M=y
 
-# CONFIG_LV_USE_USER_DATA removed in LVGL 9 (user_data is always available)
-CONFIG_LV_USE_CHART=y
-# On-screen FPS/CPU counter (LVGL 9 perf monitor needs the system monitor)
-CONFIG_LV_USE_SYSMON=y
-CONFIG_LV_USE_PERF_MONITOR=y
-# 60 FPS target: refresh a little under 16 ms so the 60 Hz panel is always fed
-CONFIG_LV_DEF_REFR_PERIOD=12
-
 CONFIG_ESP32S3_DATA_CACHE_LINE_64B=y
 CONFIG_ESP32S3_DATA_CACHE_LINE_SIZE=64
 
@@ -24,11 +16,11 @@ CONFIG_PARTITION_TABLE_CUSTOM=y
 
 CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y
 
-# 1 kHz FreeRTOS tick: 10 ms ticks (100 Hz default) quantize the LVGL task's
-# waits and cap the frame rate at ~50 FPS; 1 ms ticks are needed for 60 FPS.
+# 1 kHz FreeRTOS tick: 10 ms ticks (100 Hz default) quantize the game loop's
+# vTaskDelay(1) waits and cap the frame rate at ~50 FPS; 1 ms ticks give 60 FPS.
 CONFIG_FREERTOS_HZ=1000
 
-# Build LVGL/rendering with -O2 to roughly halve software render time.
+# Build with -O2 to roughly halve software render time.
 CONFIG_COMPILER_OPTIMIZATION_PERF=y
 
 #CONFIG_ESPTOOLPY_FLASHMODE_QIO=y
