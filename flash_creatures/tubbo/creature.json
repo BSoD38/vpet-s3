@@ -1,6 +1,7 @@
 {
   "name": "Tubbo",
   "tier": 3,
+  "attribute": "virus",
   "base": {
     "hp": 130,
     "str": 9,

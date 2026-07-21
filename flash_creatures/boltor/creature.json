@@ -1,6 +1,7 @@
 {
   "name": "Boltor",
   "tier": 4,
+  "attribute": "virus",
   "base": {
     "hp": 220,
     "str": 22,

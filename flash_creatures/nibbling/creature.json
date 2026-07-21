@@ -1,6 +1,7 @@
 {
   "name": "Nibbling",
   "tier": 1,
+  "attribute": "data",
   "base": {
     "hp": 30,
     "str": 4,

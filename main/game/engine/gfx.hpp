@@ -12,6 +12,9 @@ constexpr uint16_t rgb565(uint8_t r, uint8_t g, uint8_t b) {
     return (uint16_t)(((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3));
 }
 
+// Blend two RGB565 colors channel-wise: t=0 -> a, t=1 -> b (t is clamped).
+uint16_t mix565(uint16_t a, uint16_t b, float t);
+
 // Palette
 namespace col {
     static constexpr uint16_t black  = rgb565(15, 15, 20);

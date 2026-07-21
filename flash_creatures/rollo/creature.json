@@ -1,6 +1,7 @@
 {
   "name": "Rollo",
   "tier": 4,
+  "attribute": "vaccine",
   "base": {
     "hp": 300,
     "str": 20,

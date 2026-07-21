@@ -6,6 +6,7 @@
 #include <dirent.h>
 #include <sys/stat.h>
 #include <cstring>
+#include <strings.h>   // strcasecmp (case-insensitive attribute parsing)
 #include <cstdio>
 #include <cstdlib>
 
@@ -54,6 +55,37 @@ static void jstr(cJSON* o, const char* k, char* dst, int n, const char* def)
     }
     strncpy(dst, s, n - 1);
     dst[n - 1] = '\0';
+}
+
+// Map the optional "attribute" string to the battle type enum (default Free).
+static uint8_t parse_attribute(cJSON* o)
+{
+    char s[16];
+    jstr(o, "attribute", s, sizeof s, "free");
+    if (strcasecmp(s, "vaccine") == 0) return ATTR_VACCINE;
+    if (strcasecmp(s, "data")    == 0) return ATTR_DATA;
+    if (strcasecmp(s, "virus")   == 0) return ATTR_VIRUS;
+    return ATTR_FREE;
+}
+
+uint16_t attr_color(uint8_t a)
+{
+    switch (a) {
+        case ATTR_VACCINE: return rgb565(90, 180, 240);
+        case ATTR_DATA:    return rgb565(90, 210, 120);
+        case ATTR_VIRUS:   return rgb565(190, 110, 220);
+        default:           return col::dim;
+    }
+}
+
+const char* attr_short(uint8_t a)
+{
+    switch (a) {
+        case ATTR_VACCINE: return "VAC";
+        case ATTR_DATA:    return "DAT";
+        case ATTR_VIRUS:   return "VIR";
+        default:           return "---";
+    }
 }
 
 // Decode a PNG file into a fresh PSRAM sprite. Transparent PNG pixels leave the
@@ -118,6 +150,7 @@ bool CreatureRegistry::parseFile(const char* path, Creature& c)
     jstr(root, "id",   c.id,   sizeof c.id,   "");
     jstr(root, "name", c.name, sizeof c.name, "?");
     c.tier = (uint8_t)jnum(root, "tier", 0);
+    c.attribute = parse_attribute(root);
 
     cJSON* base = cJSON_GetObjectItem(root, "base");
     c.baseHp  = (uint32_t)jnum(base, "hp",  0);
@@ -152,6 +185,7 @@ bool CreatureRegistry::parseFile(const char* path, Creature& c)
             e.minAgi        = (uint16_t)jnum(ev, "minAgi", 0);
             e.minInt        = (uint16_t)jnum(ev, "minInt", 0);
             e.minFriendship = (uint16_t)jnum(ev, "minFriendship", 0);
+            e.minWins       = (uint32_t)jnum(ev, "minWins", 0);
             e.maxCareMistakes = (uint8_t)jnum(ev, "maxCareMistakes", 255);
             if (e.to[0]) c.evoCount++;
         }

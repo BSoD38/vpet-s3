@@ -56,7 +56,19 @@ struct PetState {
     //     creature's innate base + this modifier. Modifiers reset to 0 on evolve. ---
     uint32_t statMod[STAT_COUNT];  // indexed by StatId (MAXHP wide; others clamp small)
     uint16_t friendship;    // 0..1000 bond meter (Stranger..Soulbound); PERSISTS across evolution
+    uint32_t wins;          // battle wins; PERSISTS across evolution (gates evos via EvoEdge.minWins)
+    uint32_t losses;        // battle losses; PERSISTS across evolution
+    float    energy;        // 0..100 training stamina; gates stat training, regenerates over time
     uint32_t lastUpdate;    // RTC seconds captured at last save (offline-aging reference)
+};
+
+// Result of a finished battle, applied to the pet and returned for the result screen.
+struct BattleOutcome {
+    bool     won;
+    int      healthPct;    // health (0..100) after the HP write-back
+    int      friendDelta;  // friendship change (+ on win, - on loss)
+    uint32_t statGain;     // total combat-stat points gained (win only)
+    bool     gotSick;      // the exit-HP sickness roll fired
 };
 
 // The virtual creature: simulation + care actions over a POD PetState.
@@ -95,6 +107,25 @@ public:
     uint32_t modifier(StatId id) const;              // trained bonus on top of the base
     uint16_t friendship() const { return s_.friendship; }
     const char* friendshipTier() const;              // "Stranger".."Soulbound"
+
+    // --- battle record (persists across evolution; feeds evolution gates) ---
+    void     recordWin();
+    void     recordLoss();
+    uint32_t wins() const   { return s_.wins; }
+    uint32_t losses() const { return s_.losses; }
+
+    // --- training energy (0..100 stamina; gates stat training via minigames) ---
+    float    energy() const { return s_.energy; }
+    bool     spendEnergy(float amount);   // deduct if available; returns false if insufficient
+
+    // Training (minigames) and battles unlock at In-Training II; a fresh egg / In-Training I
+    // is too undeveloped to train or fight. Gates the menu's Activities + Battle entries.
+    bool     activitiesUnlocked() const { return s_.stage >= STAGE_IN_TRAINING_2; }
+
+    // Apply a finished battle: write remaining HP% back to health, grant win/loss effects
+    // (stats/friendship/happiness/W-L record) and roll exit-HP sickness. hpFrac = the player's
+    // remaining HP / maxHP (0..1). Persists immediately; returns the outcome for the UI.
+    BattleOutcome applyBattleResult(bool won, float hpFrac);
 
     const PetState& state() const { return s_; }      // read-only view for scenes/HUD
     const Creature* creature() const { return cur(); }  // current creature definition

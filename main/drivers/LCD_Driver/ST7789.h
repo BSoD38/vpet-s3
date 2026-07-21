@@ -39,5 +39,7 @@ extern esp_lcd_touch_handle_t tp;
 extern uint8_t LCD_Backlight;
 
 void Backlight_Init(void);           // init LEDC backlight (called by LCD_Init)
-void Set_Backlight(uint8_t Light);   // 0..100 brightness
+void Set_Backlight(uint8_t Light);   // 0..100 brightness (no-op until Backlight_Init has run)
+void Backlight_Suspend(uint8_t on);  // force the panel dark (screen off) while remembering the
+                                     // last requested level; off restores it (used by device sleep)
 void LCD_Init(void);                 // backlight + touch init (LovyanGFX owns the panel)

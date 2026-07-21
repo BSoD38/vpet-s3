@@ -1,18 +1,21 @@
 #pragma once
 #include "engine/input.hpp"
+#include "engine/power.hpp"
 #include "sim/save.hpp"
 #include "sim/creatures.hpp"
 #include "sim/pet.hpp"
 #include "scene.hpp"
 #include "scenes/care/scene_home.hpp"
 #include "scenes/minigames/scene_run.hpp"
+#include "scenes/battle/scene_battle.hpp"
+#include "scenes/battle/scene_battle_select.hpp"
 #include "scenes/menus/scene_menu.hpp"
 #include "scenes/menus/scene_settings.hpp"
 #include "scenes/menus/scene_timeset.hpp"
 #include "scenes/menus/scene_stats.hpp"
 #include "scenes/menus/scene_rename.hpp"
 
-enum class SceneId { Home, Menu, Run, Settings, TimeSet, Stats, Rename };
+enum class SceneId { Home, Menu, Run, Battle, BattleSelect, Settings, TimeSet, Stats, Rename };
 
 // Scene-change animation. Forward = going deeper (new covers, slides in from the
 // right with overshoot); Back = returning (old slides off, revealing new);
@@ -33,6 +36,8 @@ public:
     SceneHome     home;
     SceneMenu     menu;
     SceneRun      run;
+    SceneBattle   battle;
+    SceneBattleSelect battleSelect;
     SceneSettings settings;
     SceneTimeSet  timeset;
     SceneStats    stats;
@@ -46,4 +51,7 @@ private:
     bool  transitioning_ = false;   // a slide is in progress (input suppressed)
     float transT_ = 0.0f;           // 0..1 slide progress
     Slide slide_ = Slide::None;
+
+    PowerManager power_;                     // device sleep: mode + button gestures + auto-sleep
+    SceneId      curScene_ = SceneId::Home;  // tracked so auto light-sleep only fires on Home
 };

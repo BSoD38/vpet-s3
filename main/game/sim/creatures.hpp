@@ -8,6 +8,19 @@
 // creatures may be dropped on the SD card (/sdcard/creatures). On an id collision the
 // SD copy wins (so the card can override/mod the base game).
 
+// Battle attribute for the type triangle: Vaccine > Data > Virus > Vaccine. Free is
+// neutral (no advantage either way). Stored on each Creature; drives combat type bonuses.
+enum Attribute : uint8_t {
+    ATTR_FREE = 0,
+    ATTR_VACCINE,
+    ATTR_DATA,
+    ATTR_VIRUS,
+};
+
+// Presentation helpers for the battle attribute (reusable across scenes/UI).
+uint16_t    attr_color(uint8_t attribute);   // theme color (rgb565)
+const char* attr_short(uint8_t attribute);   // 3-letter tag: "VAC"/"DAT"/"VIR"/"---"
+
 // One evolution edge + the gate that unlocks it. Gates test EFFECTIVE stats (base+mod).
 struct EvoEdge {
     char     to[24];             // target creature id (resolved to an index at load)
@@ -15,6 +28,7 @@ struct EvoEdge {
     uint32_t minHp;
     uint16_t minStr, minEnd, minAgi, minInt;
     uint16_t minFriendship;
+    uint32_t minWins;            // battle wins required (0 = ignore)
     uint8_t  maxCareMistakes;    // 255 = ignore (an always-eligible fallback edge)
 };
 
@@ -23,6 +37,7 @@ struct Creature {
     char     id[24];
     char     name[24];
     uint8_t  tier;               // LifeStage
+    uint8_t  attribute;          // Attribute (Vaccine/Data/Virus triangle; Free = neutral)
     uint32_t baseHp;             // innate base stats (effective = base + trained modifier)
     uint16_t baseStr, baseEnd, baseAgi, baseInt;
     float    hungerPerHr, happyPerHr, poopIntervalS;

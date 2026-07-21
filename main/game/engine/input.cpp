@@ -7,8 +7,9 @@
 // middle of a real press. Treated naively that looks like release-then-press and
 // fires a second "pressed" edge. We deglitch (require several consecutive empty
 // reads before calling it released) and rate-limit accepted presses.
-static const int     RELEASE_FRAMES = 3;        // consecutive empty reads => really up (~75ms @ 40fps)
-static const int64_t DEBOUNCE_US    = 250000;   // min gap between accepted presses
+static const int     RELEASE_FRAMES = 2;        // consecutive empty reads => really up (bridges 1-frame dropouts)
+static const int64_t DEBOUNCE_US    = 70000;    // min gap between accepted presses (~just kills contact chatter;
+                                                //  low enough that deliberate re-taps / button switches register)
 
 void InputManager::poll(Input& in)
 {

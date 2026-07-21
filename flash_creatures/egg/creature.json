@@ -1,6 +1,7 @@
 {
   "name": "Egg",
   "tier": 0,
+  "attribute": "free",
   "base": {
     "hp": 0,
     "str": 0,

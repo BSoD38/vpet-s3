@@ -64,6 +64,11 @@ static const int   AGI_PER_PT     = 3;
 static const int   HP_PER_PT      = 6;
 static const int   STAT_DIV       = 5;   // damp overall stat gain per run (bigger = slower)
 
+// Training is energy-gated (see docs/training-and-energy.md): a run costs stamina, and if
+// the pet is too tired the stat gains are scaled down proportionally. Bond isn't gated.
+static const float ENERGY_RUN_BASE   = 12.0f;   // energy a run costs...
+static const float ENERGY_RUN_PER_PT = 1.2f;    // ...plus this per point of score
+
 static float rnd01() { return (float)(esp_random() & 0xFFFF) / 65535.0f; }
 
 void SceneRun::reset()
@@ -82,6 +87,7 @@ void SceneRun::reset()
     prevType_ = OB_LOW;
     pendingType_ = OB_LOW;      // first obstacle is always a plain hurdle (warm-up)
     rewarded_ = false;
+    tired_ = false;
     gainAgi_ = gainHp_ = 0;
     for (int i = 0; i < MAX_H; i++) { hActive_[i] = false; hCounted_[i] = false; }
 }
@@ -90,14 +96,25 @@ void SceneRun::award()
 {
     if (rewarded_) return;
     rewarded_ = true;
-    gainAgi_ = score_ * AGI_PER_PT / STAT_DIV;
-    gainHp_  = score_ * HP_PER_PT / STAT_DIV;
     Pet& pet = app().pet;
+    int rawAgi = score_ * AGI_PER_PT / STAT_DIV;
+    int rawHp  = score_ * HP_PER_PT / STAT_DIV;
+
+    // energy gate: not enough stamina -> proportionally reduced gains (and drain what's left)
+    float cost  = ENERGY_RUN_BASE + (float)score_ * ENERGY_RUN_PER_PT;
+    float have  = pet.energy();
+    float ratio = (cost <= 0.0f) ? 1.0f : (have >= cost ? 1.0f : have / cost);
+    tired_ = ratio < 0.999f;
+    gainAgi_ = (int)(rawAgi * ratio);
+    gainHp_  = (int)(rawHp  * ratio);
+
+    pet.spendEnergy(have < cost ? have : cost);   // spend the run's cost, or drain what's left if short
     pet.trainStat(STAT_AGI,   (uint32_t)gainAgi_);
     pet.trainStat(STAT_MAXHP, (uint32_t)gainHp_);
-    pet.addFriendship(2 + score_ / 8);   // sharing the game builds the bond
+    pet.addFriendship(2 + score_ / 8);   // sharing the game builds the bond (not energy-gated)
     pet.markSaved();                     // persist the run's gains
-    ESP_LOGI("RUN", "reward: score=%d +%d AGI +%d HP", score_, gainAgi_, gainHp_);
+    ESP_LOGI("RUN", "reward: score=%d +%d AGI +%d HP (energy %.0f cost %.0f x%.2f)",
+             score_, gainAgi_, gainHp_, have, cost, ratio);
 }
 
 void SceneRun::onEnter() { reset(); }
@@ -276,13 +293,16 @@ void SceneRun::render()
         gfx_text(24, 136, 1, col::white, "Tap to jump red hurdles.");
         gfx_text(24, 152, 1, col::white, "Run UNDER purple flyers.");
         gfx_text(24, 168, 1, col::white, "It speeds up as you go.");
-        gfx_text(48, 204, 2, col::good, "TAP TO START");
+        int en = (int)app().pet.energy();
+        gfx_text(24, 186, 1, en < 25 ? col::warn : col::dim, "Energy %d/100%s", en, en < 25 ? "  (tired!)" : "");
+        gfx_text(48, 210, 2, col::good, "TAP TO START");
     } else if (phase_ == OVER) {
         fb.fillRoundRect(28, 104, GAME_W - 56, 96, 8, col::panel);
         fb.drawRoundRect(28, 104, GAME_W - 56, 96, 8, col::warn);
         gfx_text(62, 116, 2, col::warn, "GAME OVER");
         gfx_text(76, 142, 2, col::white, "Score %d", score_);
-        gfx_text(52, 168, 1, col::good, "+%d AGI   +%d HP", gainAgi_, gainHp_);
+        gfx_text(52, 168, 1, tired_ ? col::warn : col::good,
+                 "+%d AGI  +%d HP%s", gainAgi_, gainHp_, tired_ ? "  tired!" : "");
         gfx_text(74, 184, 1, col::dim, "Tap to exit");
     }
 }

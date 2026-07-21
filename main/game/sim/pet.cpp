@@ -1,6 +1,7 @@
 #include "pet.hpp"
 #include "save.hpp"
 #include "creatures.hpp"
+#include "engine/util.hpp"      // clampf (shared)
 #include "engine/clock.hpp"
 #include "engine/drivers.hpp"    // Set_Backlight, LCD_Backlight, PCF85063_Read_Time, datetime
 #include "esp_log.h"
@@ -31,6 +32,9 @@ static const float    AWAKE_NIGHT_HAP_HR   = 100.0f / 6.0f;
 static const uint32_t MAX_OFFLINE          = 24u * 3600u;
 static const int      SLEEP_BACKLIGHT      = 25;
 static const float    DAY_LEN              = 86400.0f;
+static const float    ENERGY_MAX           = 100.0f;
+static const float    ENERGY_REGEN_HR      = 100.0f / 8.0f;   // training stamina: ~8h awake to refill
+static const float    ENERGY_REGEN_SLEEP_HR= 100.0f / 4.0f;   // faster while asleep
 
 // --- RPG stat caps (effective = creature base + trained modifier, clamped here) ---
 static const uint32_t MAXHP_CAP  = 99999;
@@ -43,11 +47,18 @@ static const int FR_CLEAN   = 3;
 static const int FR_HEAL    = 5;
 static const int FR_MISTAKE = 30;
 
+// --- battle stakes/rewards (tunable) ---
+static const int      FR_BATTLE_WIN   = 12;    // friendship gained on a win
+static const int      FR_BATTLE_LOSS  = 15;    // friendship lost on a loss
+static const float    HAP_BATTLE_LOSS = 14.0f; // happiness lost on a loss
+static const uint32_t WIN_STAT_GAIN   = 2;     // per combat stat (STR/END/AGI/INT), per win
+static const float    SICK_HP_THRESH  = 35.0f; // exit HP% below which sickness can roll
+static const float    SICK_MAX_CHANCE = 0.9f;  // sickness chance approached as HP% -> 0
+
 static const uint32_t PET_MAGIC   = 0x50455401;   // 'PET\1'
-static const uint16_t PET_VERSION = 5;             // v5: data-driven creatures (string id identity)
+static const uint16_t PET_VERSION = 6;             // v6: + battle record (wins/losses) + training energy
 
 static float rnd01(void) { return esp_random() * (1.0f / 4294967296.0f); }
-static float clampf(float v, float lo, float hi) { return v < lo ? lo : (v > hi ? hi : v); }
 
 const Creature* Pet::cur() const
 {
@@ -141,6 +152,7 @@ int Pet::pickEvolution() const
             stat(STAT_AGI)   >= e.minAgi &&
             stat(STAT_INT)   >= e.minInt &&
             s_.friendship    >= e.minFriendship &&
+            s_.wins          >= e.minWins &&
             s_.careMistakes  <= e.maxCareMistakes)
             return e.toIdx;
     }
@@ -180,7 +192,8 @@ void Pet::newEgg()
     if (c) s_.stage = c->tier;
     s_.gameSpeed = 1;
     s_.hunger = 100; s_.happiness = 80; s_.health = 100;
-    // statMod[] all 0; friendship 0 (evolution branches are earned, not rolled at birth)
+    s_.energy = ENERGY_MAX;            // full training stamina at birth
+    // statMod[] all 0; friendship/wins/losses 0 (evolution branches are earned, not rolled at birth)
     s_.dayClock = (float)((datetime.hour * 3600) + (datetime.minute * 60) + datetime.second);
     s_.lastSleepPhase = 0;
     s_.lastUpdate = clock_now();
@@ -238,6 +251,10 @@ void Pet::tick(float dt)   // dt is SIM seconds (the caller has applied gameSpee
     }
     s_.hunger    = clampf(s_.hunger, 0, 100);
     s_.happiness = clampf(s_.happiness, 0, 100);
+
+    // training energy refills over time (faster asleep); gates stat training
+    float eRegenHr = s_.lightsOff ? ENERGY_REGEN_SLEEP_HR : ENERGY_REGEN_HR;
+    s_.energy = clampf(s_.energy + eRegenHr * perS, 0, ENERGY_MAX);
 
     if (s_.hunger <= 0.0f) {
         if (!s_.starveFlag) {                 // one care-mistake + bond hit per starve episode
@@ -414,6 +431,54 @@ void Pet::addFriendship(int delta)
     if (v < 0) v = 0;
     if (v > FRIEND_CAP) v = FRIEND_CAP;
     s_.friendship = (uint16_t)v;
+}
+
+void Pet::recordWin()  { if (s_.wins   != 0xFFFFFFFFu) s_.wins++; }
+void Pet::recordLoss() { if (s_.losses != 0xFFFFFFFFu) s_.losses++; }
+
+bool Pet::spendEnergy(float amount)
+{
+    if (amount <= 0.0f) return true;
+    if (s_.energy < amount) return false;
+    s_.energy -= amount;
+    return true;
+}
+
+BattleOutcome Pet::applyBattleResult(bool won, float hpFrac)
+{
+    BattleOutcome o{};
+    o.won = won;
+    hpFrac = clampf(hpFrac, 0.0f, 1.0f);
+
+    if (won) {
+        s_.health = clampf(hpFrac * 100.0f, 1.0f, 100.0f);   // keep whatever HP survived
+        trainStat(STAT_STR, WIN_STAT_GAIN);
+        trainStat(STAT_END, WIN_STAT_GAIN);
+        trainStat(STAT_AGI, WIN_STAT_GAIN);
+        trainStat(STAT_INT, WIN_STAT_GAIN);
+        o.statGain = WIN_STAT_GAIN * 4;
+        addFriendship(FR_BATTLE_WIN);
+        o.friendDelta = FR_BATTLE_WIN;
+        recordWin();
+    } else {
+        s_.health = 1.0f;                                    // defeat: scraped through at 1%
+        addFriendship(-FR_BATTLE_LOSS);
+        o.friendDelta = -FR_BATTLE_LOSS;
+        s_.happiness = clampf(s_.happiness - HAP_BATTLE_LOSS, 0.0f, 100.0f);
+        recordLoss();
+    }
+
+    // exit-HP sickness roll: the lower the HP you walked away with, the likelier a cold
+    if (!s_.sick && s_.health < SICK_HP_THRESH) {
+        float chance = (SICK_HP_THRESH - s_.health) / SICK_HP_THRESH * SICK_MAX_CHANCE;
+        if (rnd01() < chance) { s_.sick = 1; o.gotSick = true; }
+    }
+
+    o.healthPct = (int)s_.health;
+    markSaved();
+    ESP_LOGI(TAG, "battle %s hp%%=%d friend%+d sick=%d", won ? "WIN" : "LOSS",
+             o.healthPct, o.friendDelta, (int)o.gotSick);
+    return o;
 }
 
 const char* Pet::friendshipTier() const

@@ -34,10 +34,13 @@ void App::setScene(SceneId id, Slide slide)
         transT_ = 0.0f;
         slide_ = slide;
     }
+    curScene_ = id;
     switch (id) {
         case SceneId::Home:     scenes.set(&home);     break;
         case SceneId::Menu:     scenes.set(&menu);     break;
         case SceneId::Run:      scenes.set(&run);      break;
+        case SceneId::Battle:       scenes.set(&battle);       break;
+        case SceneId::BattleSelect: scenes.set(&battleSelect); break;
         case SceneId::Settings: scenes.set(&settings); break;
         case SceneId::TimeSet:  scenes.set(&timeset);  break;
         case SceneId::Stats:    scenes.set(&stats);    break;
@@ -48,7 +51,7 @@ void App::setScene(SceneId id, Slide slide)
 void App::init()
 {
     gfx_init();                       // create the back-buffer (after Display_Init in main)
-    home.bind(*this); menu.bind(*this); run.bind(*this);
+    home.bind(*this); menu.bind(*this); run.bind(*this); battle.bind(*this); battleSelect.bind(*this);
     settings.bind(*this); timeset.bind(*this);
     stats.bind(*this); rename.bind(*this);
 
@@ -56,6 +59,9 @@ void App::init()
     pet.boot();                       // load save + offline aging, or hatch a new egg
     debugOverlay = save.loadU8("dbg", 0) != 0;
     setScene(SceneId::Home);
+
+    power_mark_display_ready();        // panel is up: sleep helpers may now touch it
+    power_.begin(esp_timer_get_time());
 }
 
 void App::runLoop()
@@ -71,6 +77,28 @@ void App::runLoop()
         last = now;
 
         input.poll(in);
+
+        // --- device power management (light/deep sleep, PWR button) ---
+        // Runs before scene input so a wake-tap isn't also handled as a game tap.
+        bool touchAct  = in.pressed || in.down;
+        bool sceneIdle = (curScene_ == SceneId::Home) && !transitioning_;
+        switch (power_.update(touchAct, sceneIdle, now)) {
+            case PowerAction::EnterLight: power_enter_light(); break;
+            case PowerAction::ExitLight:  power_exit_light();  break;
+            case PowerAction::EnterDeep:  pet.markSaved(); power_enter_deep_sleep(); break;   // no return
+            case PowerAction::PowerOff:   pet.markSaved(); power_off();               break;  // no return
+            case PowerAction::None:       break;
+        }
+        if (power_.mode() == PowerMode::Light) {
+            // Screen off: keep advancing the sim + timekeeping, but skip input/render.
+            // A touch or PWR press is picked up next iteration and wakes us.
+            pet.tick(dt * (float)pet.state().gameSpeed);
+            saveAcc += dt;
+            if (saveAcc >= AUTOSAVE_SECS) { saveAcc = 0; pet.markSaved(); }
+            vTaskDelay(pdMS_TO_TICKS(100));
+            continue;
+        }
+
         if (!transitioning_) scenes.input(in);         // ignore taps mid-slide
 
         pet.tick(dt * (float)pet.state().gameSpeed);   // speed multiplier applied here

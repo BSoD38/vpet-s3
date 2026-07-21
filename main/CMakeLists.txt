@@ -6,20 +6,27 @@ idf_component_register(
                               "./game/core/app.cpp"
                               "./game/core/game.cpp"
 
-                              # game: engine (rendering, input, clock)
+                              # game: engine (rendering, input, clock, power/sleep)
                               "./game/engine/display.cpp"
                               "./game/engine/gfx.cpp"
                               "./game/engine/input.cpp"
                               "./game/engine/clock.cpp"
+                              "./game/engine/power.cpp"
 
                               # game: sim (simulation state + persistence)
                               "./game/sim/pet.cpp"
                               "./game/sim/creatures.cpp"
                               "./game/sim/save.cpp"
 
+                              # game: battle (headless combat core)
+                              "./game/battle/battle.cpp"
+
                               # game: scenes (screens, grouped by kind)
                               "./game/scenes/care/scene_home.cpp"
                               "./game/scenes/minigames/scene_run.cpp"
+                              "./game/scenes/battle/scene_battle.cpp"
+                              "./game/scenes/battle/scene_battle_draw.cpp"
+                              "./game/scenes/battle/scene_battle_select.cpp"
                               "./game/scenes/menus/scene_menu.cpp"
                               "./game/scenes/menus/scene_settings.cpp"
                               "./game/scenes/menus/scene_timeset.cpp"

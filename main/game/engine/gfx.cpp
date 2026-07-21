@@ -26,6 +26,8 @@ void gfx_init()
     // as byte-swapped (swap565), which scrambles the colors; tell fb to read it natively
     // so pushImage() blits come out right.
     fb.setSwapBytes(true);
+    // We position all text manually; never let it wrap to a new line (clip at the edge instead).
+    fb.setTextWrap(false);
 }
 
 void gfx_present()
@@ -106,6 +108,16 @@ void gfx_bar(int x, int y, int w, int h, float frac,
     fb.fillRect(x, y, w, h, bg);
     fb.fillRect(x, y, (int)(w * frac), h, fg);
     fb.drawRect(x, y, w, h, border);
+}
+
+uint16_t mix565(uint16_t a, uint16_t b, float t)
+{
+    if (t < 0) t = 0;
+    if (t > 1) t = 1;
+    int ar = (a >> 11) & 0x1F, ag = (a >> 5) & 0x3F, ab = a & 0x1F;
+    int br = (b >> 11) & 0x1F, bg = (b >> 5) & 0x3F, bb = b & 0x1F;
+    int r = ar + (int)((br - ar) * t), g = ag + (int)((bg - ag) * t), bl = ab + (int)((bb - ab) * t);
+    return (uint16_t)((r << 11) | (g << 5) | bl);
 }
 
 void gfx_blit(const Sprite& s, int cx, int cy)

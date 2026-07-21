@@ -36,13 +36,15 @@ void SceneStats::render()
 
     // --- care meters ---
     gfx_text(12, 78, 1, col::accent, "CARE");
-    const char* clab[3] = { "HUN", "HAP", "HEA" };
-    float cval[3] = { p.hunger, p.happiness, p.health };
-    for (int i = 0; i < 3; i++) {
-        int y = 93 + i * 15;
+    const char* clab[4] = { "HUN", "HAP", "HEA", "ENE" };
+    float cval[4] = { p.hunger, p.happiness, p.health, p.energy };
+    for (int i = 0; i < 4; i++) {
+        int y = 91 + i * 13;
         gfx_text(12, y + 1, 1, col::white, "%s", clab[i]);
         float f = cval[i] / 100.0f;
-        gfx_bar(46, y, 148, 9, f, f < 0.30f ? col::warn : col::good, col::black, col::dim);
+        uint16_t fg = (i == 3) ? (f < 0.30f ? col::warn : rgb565(90, 170, 255))   // ENE = stamina (blue)
+                               : (f < 0.30f ? col::warn : col::good);
+        gfx_bar(46, y, 148, 9, f, fg, col::black, col::dim);
         gfx_text(200, y + 1, 1, col::dim, "%d", (int)cval[i]);
     }
 
@@ -50,6 +52,7 @@ void SceneStats::render()
 
     // --- battle stats (effective = creature base + trained modifier) ---
     gfx_text(12, 146, 1, col::accent, "BATTLE");
+    gfx_text(140, 146, 1, col::dim, "W:%u L:%u", (unsigned)pet.wins(), (unsigned)pet.losses());
     gfx_text(12, 164, 1, col::dim, "MAX HP");
     gfx_text(78, 160, 2, col::white, "%u", (unsigned)pet.stat(STAT_MAXHP));
 

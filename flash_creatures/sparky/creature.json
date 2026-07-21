@@ -1,6 +1,7 @@
 {
   "name": "Sparky",
   "tier": 3,
+  "attribute": "vaccine",
   "base": {
     "hp": 90,
     "str": 10,

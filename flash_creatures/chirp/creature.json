@@ -1,6 +1,7 @@
 {
   "name": "Chirp",
   "tier": 2,
+  "attribute": "data",
   "base": {
     "hp": 50,
     "str": 6,
