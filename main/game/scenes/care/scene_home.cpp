@@ -1,6 +1,7 @@
 #include "scene_home.hpp"
 #include "core/app.hpp"
 #include "engine/gfx.hpp"
+#include "engine/widgets.hpp"
 #include "sim/creatures.hpp"        // Creature (current sprite)
 #include "engine/clock.hpp"            // clock_datetime (torn-read-safe RTC snapshot)
 #include "engine/drivers.hpp"          // BAT_analogVolts
@@ -22,10 +23,12 @@ static const int   ACT_N  = 4;
 static const int   ACT_W  = 52, ACT_H = 52, ACT_GAP = 5, ACT_X0 = 8, ACT_Y = 260;
 static const int   MB_X   = 204, MB_Y = 4, MB_W = 32, MB_H = 24;   // visible button
 // Touch target = the top-right corner strip ABOVE the stat bars (bars start at
-// y29). Kept generous in x but capped at y28 so it never overlaps the HAP bar.
-static const int   MB_HX = 192, MB_HY = 0, MB_HW = GAME_W - 192, MB_HH = 28;
+// y29). Kept generous in x but capped so that even with TOUCH_SLOP the hit box tops out at
+// y28 (h + slop = 27 + 2) and never reaches the HAP bar.
+static const Rect  MENU_HIT { 192, 0, GAME_W - 192, 27 };          // tap here -> open Menu
 static const char* ACT_LABEL[4] = { "Feed", "Clean", "Heal", "Sleep" };
-static int act_x(int i) { return ACT_X0 + i * (ACT_W + ACT_GAP); }
+static int  act_x(int i)    { return ACT_X0 + i * (ACT_W + ACT_GAP); }
+static Rect act_rect(int i) { return { act_x(i), ACT_Y, ACT_W, ACT_H }; }
 
 // Petting: accumulate finger travel; every PET_CHUNK_DIST px of rubbing earns a chunk.
 // (Distance-based, not time-based, so it's robust to the touch controller repeating
@@ -126,7 +129,7 @@ void SceneHome::update(float dt)
     int psh = petSpr ? petSpr->height() : SPRITE_H;
     int bodyCy = PET_FEET - psh / 2;              // no bob here: keep the hit box stable
     int hzW = psw / 2 + PET_HIT_MARGIN, hzH = psh / 2 + PET_HIT_MARGIN;
-    bool onPetZone = hit(tx_, ty_, PET_CX - hzW, bodyCy - hzH, hzW * 2, hzH * 2);
+    bool onPetZone = Rect{ PET_CX - hzW, bodyCy - hzH, hzW * 2, hzH * 2 }.contains(tx_, ty_);
     bool interactive = p.stage != STAGE_EGG && !p.lightsOff && !p.sick;
     bool overPet = interactive && onPetZone;    // can actually pet/poke
     overPet_ = overPet;
@@ -277,7 +280,7 @@ void SceneHome::render()
         int bx = act_x(i);
         bool feedBlocked = (i == 0 && (p.sick || p.lightsOff));   // no feeding while sick/asleep
         uint16_t bg = feedBlocked ? rgb565(46, 42, 46) : col::panel;
-        fb.fillRoundRect(bx, ACT_Y, ACT_W, ACT_H, 7, bg);
+        act_rect(i).fill(bg, 7);
         int ix = bx + ACT_W / 2, iy = ACT_Y + 18;
         switch (i) {
             case 0: icon_feed(ix, iy, feedBlocked); break;
@@ -318,9 +321,9 @@ void SceneHome::onInput(const Input& in)
     // Creature poke/pet gestures are resolved in update(); here we handle the taps
     // on the top-right menu button and the bottom action bar.
     if (!in.pressed) return;
-    if (hit(in.x, in.y, MB_HX, MB_HY, MB_HW, MB_HH)) { app().setScene(SceneId::Menu, Slide::Forward); return; }
+    if (MENU_HIT.contains(in)) { app().setScene(SceneId::Menu, Slide::Forward); return; }
     for (int i = 0; i < ACT_N; i++) {
-        if (hit(in.x, in.y, act_x(i), ACT_Y, ACT_W, ACT_H)) {
+        if (act_rect(i).contains(in)) {
             switch (i) {
                 case 0: app().pet.feed();         break;
                 case 1: app().pet.clean();        break;

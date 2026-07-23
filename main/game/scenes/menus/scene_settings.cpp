@@ -1,83 +1,112 @@
 #include "scene_settings.hpp"
 #include "core/app.hpp"
 #include "engine/gfx.hpp"
+#include "engine/tabs.hpp"
+#include "engine/widgets.hpp"
 #include <cstring>
 #include <cstdio>
 
 static const int SPEEDS[] = { 1, 2, 5, 10, 20, 50, 100 };
 static const int SPEED_N  = (int)(sizeof(SPEEDS) / sizeof(SPEEDS[0]));
 
-static const int BACK_X = GAME_W - 72, BACK_Y = 12, BACK_W = 60, BACK_H = 30;
-static const int GRID_X0 = 7, GRID_Y = 90, BTN_W = 52, BTN_H = 36, BTN_GX = 6, BTN_GY = 8, COLS = 4;
+// tab bar
+static const char* const TABS[] = { "GAME", "SYSTEM" };
+static const int TAB_N = 2;
+static const int TAB_X = 8, TAB_Y = 44, TAB_W = GAME_W - 16, TAB_H = 32;
 
-static const int ROW_X = 16, ROW_W = GAME_W - 32, ROW_H = 32;
-static const int DBG_Y = 182;    // debug-overlay toggle row
-static const int TIME_Y = 222;   // set time/date row
+// GAME page: game-speed grid
+static const int GRID_X0 = 7, GRID_Y = 140, BTN_W = 52, BTN_H = 38, BTN_GX = 6, BTN_GY = 10, COLS = 4;
 
-static void btn_rect(int i, int& x, int& y)
+// SYSTEM page: full-width rows
+static const int ROW_X = 16, ROW_W = GAME_W - 32, ROW_H = 34;
+static const int DBG_Y = 96, TIME_Y = 138, CHEAT_Y = 180;
+
+static Rect speed_btn(int i)
 {
-    x = GRID_X0 + (i % COLS) * (BTN_W + BTN_GX);
-    y = GRID_Y  + (i / COLS) * (BTN_H + BTN_GY);
+    return { GRID_X0 + (i % COLS) * (BTN_W + BTN_GX),
+             GRID_Y  + (i / COLS) * (BTN_H + BTN_GY), BTN_W, BTN_H };
+}
+
+// SYSTEM page rows share x/width/height; only the y differs.
+static Rect sys_row(int y) { return { ROW_X, y, ROW_W, ROW_H }; }
+
+void SceneSettings::onEnter() { page_ = 0; }   // always open on the Game tab
+
+static void render_game(App& app)
+{
+    unsigned speed = app.pet.state().gameSpeed;
+    gfx_text(16, 88,  1, col::dim,  "Game speed (1x = real time)");
+    gfx_text(16, 104, 2, col::good, "Now: %ux", speed);
+    for (int i = 0; i < SPEED_N; i++) {
+        bool sel = ((unsigned)SPEEDS[i] == speed);
+        char lbl[8]; snprintf(lbl, sizeof lbl, "%dx", SPEEDS[i]);
+        speed_btn(i).button(lbl, sel ? col::accent : rgb565(60, 64, 84), sel ? col::black : col::white);
+    }
+}
+
+static void render_system(App& app)
+{
+    bool dbg = app.debugOverlay;
+    sys_row(DBG_Y).fill(dbg ? col::good : rgb565(60, 64, 84));
+    gfx_text(ROW_X + 12, DBG_Y + 10, 2, dbg ? col::black : col::white, "Debug info");
+    gfx_text(ROW_X + ROW_W - 38, DBG_Y + 11, 2, dbg ? col::black : col::dim, dbg ? "ON" : "OFF");
+
+    sys_row(TIME_Y).fill(col::accent);
+    gfx_text(ROW_X + 12, TIME_Y + 10, 2, col::black, "Set Time/Date");
+    gfx_text(ROW_X + ROW_W - 18, TIME_Y + 11, 2, col::black, ">");
+
+    sys_row(CHEAT_Y).fill(rgb565(120, 90, 150));
+    gfx_text(ROW_X + 12, CHEAT_Y + 10, 2, col::white, "Cheats / Debug");
+    gfx_text(ROW_X + ROW_W - 18, CHEAT_Y + 11, 2, col::white, ">");
+
+    gfx_text(16, 236, 1, col::dim, "Species: %s", app.pet.speciesName());
 }
 
 void SceneSettings::render()
 {
-    unsigned speed = app().pet.state().gameSpeed;
-
     fb.fillScreen(col::panel);
     gfx_text(16, 16, 2, col::accent, "Settings");
 
-    gfx_text(16, 46, 1, col::dim,  "Game speed (1x = real time)");
-    gfx_text(16, 60, 2, col::good, "Now: %ux", speed);
+    draw_back();
 
-    for (int i = 0; i < SPEED_N; i++) {
-        int bx, by; btn_rect(i, bx, by);
-        bool sel = ((unsigned)SPEEDS[i] == speed);
-        fb.fillRoundRect(bx, by, BTN_W, BTN_H, 6, sel ? col::accent : rgb565(60, 64, 84));
-        char lbl[8]; snprintf(lbl, sizeof lbl, "%dx", SPEEDS[i]);
-        int lw = (int)strlen(lbl) * 12;
-        gfx_text(bx + (BTN_W - lw) / 2, by + (BTN_H - 14) / 2, 2,
-                 sel ? col::black : col::white, "%s", lbl);
-    }
+    tabbar_draw(TAB_X, TAB_Y, TAB_W, TAB_H, TABS, TAB_N, page_);
 
-    // debug overlay toggle
-    bool dbg = app().debugOverlay;
-    fb.fillRoundRect(ROW_X, DBG_Y, ROW_W, ROW_H, 6, dbg ? col::good : rgb565(60, 64, 84));
-    gfx_text(ROW_X + 12, DBG_Y + 9, 2, dbg ? col::black : col::white, "Debug info");
-    gfx_text(ROW_X + ROW_W - 38, DBG_Y + 11, 2, dbg ? col::black : col::dim, dbg ? "ON" : "OFF");
-
-    // set time / date
-    fb.fillRoundRect(ROW_X, TIME_Y, ROW_W, ROW_H, 6, col::accent);
-    gfx_text(ROW_X + 12, TIME_Y + 9, 2, col::black, "Set Time/Date");
-    gfx_text(ROW_X + ROW_W - 18, TIME_Y + 11, 2, col::black, ">");
-
-    gfx_text(16, 268, 1, col::dim, "Species: %s", app().pet.speciesName());
-
-    fb.fillRoundRect(BACK_X, BACK_Y, BACK_W, BACK_H, 6, col::accent);
-    gfx_text(BACK_X + 10, BACK_Y + 8, 2, col::black, "Back");
+    if (page_ == 0) render_game(app());
+    else            render_system(app());
 }
 
 void SceneSettings::onInput(const Input& in)
 {
     if (!in.pressed) return;
-    if (hit(in.x, in.y, BACK_X, BACK_Y, BACK_W, BACK_H)) {
+
+    if (kBack.contains(in)) {
         app().setScene(SceneId::Menu, Slide::Back);
         return;
     }
-    for (int i = 0; i < SPEED_N; i++) {
-        int bx, by; btn_rect(i, bx, by);
-        if (hit(in.x, in.y, bx, by, BTN_W, BTN_H)) {
-            app().pet.setGameSpeed((uint16_t)SPEEDS[i]);
+
+    int tab = tabbar_hit(in.x, in.y, TAB_X, TAB_Y, TAB_W, TAB_H, TAB_N);
+    if (tab >= 0) { page_ = tab; return; }
+
+    if (page_ == 0) {
+        for (int i = 0; i < SPEED_N; i++) {
+            if (speed_btn(i).contains(in)) {
+                app().pet.setGameSpeed((uint16_t)SPEEDS[i]);
+                return;
+            }
+        }
+    } else {
+        if (sys_row(DBG_Y).contains(in)) {
+            app().debugOverlay = !app().debugOverlay;
+            app().save.storeU8("dbg", app().debugOverlay ? 1 : 0);
             return;
         }
-    }
-    if (hit(in.x, in.y, ROW_X, DBG_Y, ROW_W, ROW_H)) {
-        app().debugOverlay = !app().debugOverlay;
-        app().save.storeU8("dbg", app().debugOverlay ? 1 : 0);
-        return;
-    }
-    if (hit(in.x, in.y, ROW_X, TIME_Y, ROW_W, ROW_H)) {
-        app().setScene(SceneId::TimeSet, Slide::Forward);
-        return;
+        if (sys_row(TIME_Y).contains(in)) {
+            app().setScene(SceneId::TimeSet, Slide::Forward);
+            return;
+        }
+        if (sys_row(CHEAT_Y).contains(in)) {
+            app().setScene(SceneId::Cheats, Slide::Forward);
+            return;
+        }
     }
 }

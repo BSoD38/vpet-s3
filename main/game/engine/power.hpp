@@ -45,9 +45,10 @@ class PowerManager {
 public:
     void begin(int64_t nowUs);
 
-    // One iteration. touchActivity = a touch occurred this frame; sceneIdle = the
-    // current scene permits auto light-sleep (Home). Returns the action App must apply.
-    PowerAction update(bool touchActivity, bool sceneIdle, int64_t nowUs);
+    // One iteration. touchActivity = a touch occurred this frame; sleepAllowed = the
+    // current scene permits sleeping (false in minigame/battle). Returns the action App
+    // must apply. Power-off (long hold) is allowed regardless of sleepAllowed.
+    PowerAction update(bool touchActivity, bool sleepAllowed, int64_t nowUs);
 
     PowerMode mode() const { return mode_; }
 

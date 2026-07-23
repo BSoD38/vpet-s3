@@ -15,9 +15,10 @@ static const char* TAG = "CREA";
 static const char* FLASH_ROOT = "/creatures";
 static const char* SD_ROOT     = "/sdcard/creatures";
 
-// Max sprite dimension (px). 144 = 3x the 48px base; sprites may be non-square up to
-// this in each axis. The Home layout (HUD->horizon budget) is sized to fit this.
-static const uint32_t SPRITE_MAX_DIM = 144;
+// Max sprite dimension (px). Sprites may be non-square up to this in each axis; a PNG larger
+// than this in either axis is rejected (creature falls back to the "?" sprite). Kept modest so
+// creatures don't dominate the 240-wide screen on the native-draw scenes (Home/Smash/Run).
+static const uint32_t SPRITE_MAX_DIM = 128;
 
 // --- small helpers -----------------------------------------------------------
 
@@ -256,6 +257,7 @@ LGFX_Sprite* CreatureRegistry::sprite(int idx)
                 victim = i;
             }
         if (victim < 0) break;                     // nothing evictable; load anyway
+        gfx_invalidate_scaled(list_[victim].sprite);   // drop scaled copies before the address is freed/reused
         delete list_[victim].sprite;
         list_[victim].sprite = nullptr;
         loadedSprites_--;

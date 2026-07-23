@@ -167,7 +167,7 @@ void PowerManager::begin(int64_t nowUs)
     btnDownUs_   = nowUs;
 }
 
-PowerAction PowerManager::update(bool touchActivity, bool sceneIdle, int64_t nowUs)
+PowerAction PowerManager::update(bool touchActivity, bool sleepAllowed, int64_t nowUs)
 {
     const bool btn         = PWR_Key_Down();
     const bool pressEdge   = btn && !btnPrev_;
@@ -179,8 +179,9 @@ PowerAction PowerManager::update(bool touchActivity, bool sceneIdle, int64_t now
     PowerAction act = PowerAction::None;
 
     if (mode_ == PowerMode::Light) {
-        // Any touch or button press wakes to Active; the waking press is consumed so it
-        // can't also be read as a hold gesture once we're back in Active.
+        // Wake on any touch or PWR press. (A scene can't switch during light sleep -- App
+        // skips scene input/update while the screen is off -- so sleepAllowed can't flip
+        // here.) The waking press is consumed so it can't also read as a hold gesture in Active.
         if (touchActivity || pressEdge) {
             if (pressEdge) btnConsumed_ = true;
             mode_ = PowerMode::Active;
@@ -193,15 +194,15 @@ PowerAction PowerManager::update(bool touchActivity, bool sceneIdle, int64_t now
     } else {   // Active
         if (releaseEdge && !btnConsumed_) {
             int64_t held = nowUs - btnDownUs_;
-            if      (held >= HOLD_OFF_US)  act = PowerAction::PowerOff;
-            else if (held >= HOLD_DEEP_US) act = PowerAction::EnterDeep;
-            else                           act = PowerAction::EnterLight;
+            if      (held >= HOLD_OFF_US) act = PowerAction::PowerOff;   // always available
+            else if (sleepAllowed)                                      // sleep gestures gated
+                act = (held >= HOLD_DEEP_US) ? PowerAction::EnterDeep : PowerAction::EnterLight;
         }
         if (releaseEdge) btnConsumed_ = false;
 
-        // Auto light-sleep after sustained inactivity, but only on an idle-safe scene
-        // (Home) and never mid-press.
-        if (act == PowerAction::None && sceneIdle && !btn &&
+        // Auto light-sleep after sustained inactivity, where the scene permits it and
+        // never mid-press.
+        if (act == PowerAction::None && sleepAllowed && !btn &&
             (nowUs - lastActUs_) >= AUTO_LIGHT_US) {
             act = PowerAction::EnterLight;
         }

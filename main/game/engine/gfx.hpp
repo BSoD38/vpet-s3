@@ -57,5 +57,7 @@ void gfx_blit(const Sprite& s, int cx, int cy);         // draw sprite centered 
 void gfx_blit_sprite(LGFX_Sprite* s, int cx, int cy, uint16_t transp);           // PSRAM sprite, centered
 void gfx_blit_sprite_bottom(LGFX_Sprite* s, int cx, int bottomY, uint16_t transp);  // anchored by its feet (bottom-center)
 void gfx_blit_sprite_fit(LGFX_Sprite* s, int cx, int cy, int maxW, int maxH, uint16_t transp);  // scaled to fit a box, centered
+void gfx_blit_sprite_fit_bottom(LGFX_Sprite* s, int cx, int bottomY, int maxW, int maxH, uint16_t transp);  // feet-anchored + scaled DOWN to fit
+void gfx_invalidate_scaled(const void* src);           // drop cached scaled copies of src; call BEFORE freeing src
 void gfx_tile_region(int x, int y, int w, int h, const uint16_t* tile,   // fill a rect by repeating an opaque
                      int tw, int th, int scrollX = 0);                   // tile; scrollX shifts it left (scrolling ground)

@@ -1,14 +1,15 @@
 #include "scene_stats.hpp"
 #include "core/app.hpp"
 #include "engine/gfx.hpp"
+#include "engine/widgets.hpp"
 #include "assets/sprites.hpp"   // spr_unknown_data (fallback)
 #include <cstdio>
 
 static const Sprite SPR_FALLBACK { spr_unknown_data, SPRITE_W, SPRITE_H, SPRITE_TRANSP };  // "?" when a sprite can't be shown
 
-// buttons
-static const int RN_X = 16,  RN_Y = 274, RN_W = 100, RN_H = 34;   // Rename
-static const int BK_X = 124, BK_Y = 274, BK_W = 100, BK_H = 34;   // Back
+// buttons (this screen's Back sits bottom-right beside Rename, not the shared top-right slot)
+static const Rect RN_BTN { 16,  274, 100, 34 };   // Rename
+static const Rect BK_BTN { 124, 274, 100, 34 };   // Back
 
 static void draw_heart(int x, int y, int s, uint16_t c)
 {
@@ -73,15 +74,13 @@ void SceneStats::render()
     gfx_text(74, 244, 2, col::white, "%s", pet.friendshipTier());
 
     // --- buttons ---
-    fb.fillRoundRect(RN_X, RN_Y, RN_W, RN_H, 6, col::accent);
-    gfx_text(RN_X + 14, RN_Y + 9, 2, col::black, "Rename");
-    fb.fillRoundRect(BK_X, BK_Y, BK_W, BK_H, 6, col::accent);
-    gfx_text(BK_X + 24, BK_Y + 9, 2, col::black, "Back");
+    RN_BTN.button("Rename", col::accent, col::black);
+    BK_BTN.button("Back",   col::accent, col::black);
 }
 
 void SceneStats::onInput(const Input& in)
 {
     if (!in.pressed) return;
-    if (hit(in.x, in.y, RN_X, RN_Y, RN_W, RN_H)) { app().setScene(SceneId::Rename, Slide::Forward); return; }
-    if (hit(in.x, in.y, BK_X, BK_Y, BK_W, BK_H)) { app().setScene(SceneId::Menu,   Slide::Back);    return; }
+    if (RN_BTN.contains(in)) { app().setScene(SceneId::Rename, Slide::Forward); return; }
+    if (BK_BTN.contains(in)) { app().setScene(SceneId::Menu,   Slide::Back);    return; }
 }

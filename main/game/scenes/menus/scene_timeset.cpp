@@ -1,6 +1,7 @@
 #include "scene_timeset.hpp"
 #include "core/app.hpp"
 #include "engine/gfx.hpp"
+#include "engine/widgets.hpp"
 #include "engine/drivers.hpp"   // datetime, datetime_t, PCF85063_Set_All, PCF85063_Read_Time
 
 static const int ROW_N = 5;
@@ -9,9 +10,11 @@ static const char* ROW_LBL[ROW_N] = { "Year", "Month", "Day", "Hour", "Min" };
 static const int ROW_Y0 = 58, ROW_DY = 36;
 static const int LBL_X = 16, VAL_X = 140;
 static const int MINUS_X = 92, PLUS_X = 192, STEP_W = 38, STEP_H = 32;
+static Rect minus_btn(int i) { return { MINUS_X, ROW_Y0 + i * ROW_DY, STEP_W, STEP_H }; }
+static Rect plus_btn (int i) { return { PLUS_X,  ROW_Y0 + i * ROW_DY, STEP_W, STEP_H }; }
 
-static const int SET_X = 16,  SET_Y = 250, SET_W = 100, SET_H = 46;
-static const int CAN_X = 126, CAN_Y = 250, CAN_W = 98,  CAN_H = 46;
+static const Rect SET_BTN { 16,  250, 100, 46 };
+static const Rect CAN_BTN { 126, 250, 98,  46 };
 
 static const int YEAR_MIN = 2000, YEAR_MAX = 2069;   // driver stores year-1970 as BCD (<=99)
 
@@ -70,9 +73,8 @@ void SceneTimeSet::update(float dt)
     int row = -1, dir = 0;
     if (down_) {
         for (int i = 0; i < ROW_N; i++) {
-            int ry = ROW_Y0 + i * ROW_DY;
-            if      (hit(px_, py_, MINUS_X, ry, STEP_W, STEP_H)) { row = i; dir = -1; break; }
-            else if (hit(px_, py_, PLUS_X,  ry, STEP_W, STEP_H)) { row = i; dir = +1; break; }
+            if      (minus_btn(i).contains(px_, py_)) { row = i; dir = -1; break; }
+            else if (plus_btn(i).contains(px_, py_))  { row = i; dir = +1; break; }
         }
     }
 
@@ -105,18 +107,14 @@ void SceneTimeSet::render()
     for (int i = 0; i < ROW_N; i++) {
         int ry = ROW_Y0 + i * ROW_DY;
         gfx_text(LBL_X, ry + 9, 2, col::white, "%s", ROW_LBL[i]);
-        fb.fillRoundRect(MINUS_X, ry, STEP_W, STEP_H, 5, rgb565(60, 64, 84));
-        gfx_text(MINUS_X + 13, ry + 9, 2, col::white, "-");
+        minus_btn(i).button("-", rgb565(60, 64, 84), col::white, 2, 5);
         if (i == 0) gfx_text(VAL_X, ry + 9, 2, col::good, "%d", vals[i]);
         else        gfx_text(VAL_X + 6, ry + 9, 2, col::good, "%02d", vals[i]);
-        fb.fillRoundRect(PLUS_X, ry, STEP_W, STEP_H, 5, rgb565(60, 64, 84));
-        gfx_text(PLUS_X + 12, ry + 9, 2, col::white, "+");
+        plus_btn(i).button("+", rgb565(60, 64, 84), col::white, 2, 5);
     }
 
-    fb.fillRoundRect(SET_X, SET_Y, SET_W, SET_H, 7, col::good);
-    gfx_text(SET_X + 34, SET_Y + 16, 2, col::black, "Set");
-    fb.fillRoundRect(CAN_X, CAN_Y, CAN_W, CAN_H, 7, rgb565(70, 74, 92));
-    gfx_text(CAN_X + 16, CAN_Y + 16, 2, col::white, "Cancel");
+    SET_BTN.button("Set",    col::good,          col::black, 2, 7);
+    CAN_BTN.button("Cancel", rgb565(70, 74, 92), col::white, 2, 7);
 }
 
 void SceneTimeSet::onInput(const Input& in)
@@ -126,7 +124,7 @@ void SceneTimeSet::onInput(const Input& in)
 
     if (!in.pressed) return;   // Set/Cancel are one-shot; steppers handled in update()
 
-    if (hit(in.x, in.y, SET_X, SET_Y, SET_W, SET_H)) {
+    if (SET_BTN.contains(in)) {
         datetime_t t{};
         t.year   = (uint16_t)y_;
         t.month  = (uint8_t)mon_;
@@ -142,7 +140,7 @@ void SceneTimeSet::onInput(const Input& in)
         app().setScene(SceneId::Settings, Slide::Back);
         return;
     }
-    if (hit(in.x, in.y, CAN_X, CAN_Y, CAN_W, CAN_H)) {
+    if (CAN_BTN.contains(in)) {
         app().setScene(SceneId::Settings, Slide::Back);
         return;
     }

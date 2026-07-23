@@ -7,15 +7,21 @@
 #include "scene.hpp"
 #include "scenes/care/scene_home.hpp"
 #include "scenes/minigames/scene_run.hpp"
+#include "scenes/minigames/scene_mindmaze.hpp"
+#include "scenes/minigames/scene_smash.hpp"
+#include "scenes/minigames/scene_bulwark.hpp"
+#include "scenes/minigames/scene_stance.hpp"
 #include "scenes/battle/scene_battle.hpp"
-#include "scenes/battle/scene_battle_select.hpp"
+#include "scenes/menus/scene_battle_select.hpp"
+#include "scenes/menus/scene_activities.hpp"
 #include "scenes/menus/scene_menu.hpp"
 #include "scenes/menus/scene_settings.hpp"
+#include "scenes/menus/scene_cheats.hpp"
 #include "scenes/menus/scene_timeset.hpp"
 #include "scenes/menus/scene_stats.hpp"
 #include "scenes/menus/scene_rename.hpp"
 
-enum class SceneId { Home, Menu, Run, Battle, BattleSelect, Settings, TimeSet, Stats, Rename };
+enum class SceneId { Home, Menu, Activities, Run, MindMaze, Smash, Bulwark, Stance, Battle, BattleSelect, Settings, Cheats, TimeSet, Stats, Rename };
 
 // Scene-change animation. Forward = going deeper (new covers, slides in from the
 // right with overshoot); Back = returning (old slides off, revealing new);
@@ -35,10 +41,16 @@ public:
     SceneManager  scenes;
     SceneHome     home;
     SceneMenu     menu;
+    SceneActivities activities;
     SceneRun      run;
+    SceneMindMaze mindmaze;
+    SceneSmash    smash;
+    SceneBulwark  bulwark;
+    SceneStance   stance;
     SceneBattle   battle;
     SceneBattleSelect battleSelect;
     SceneSettings settings;
+    SceneCheats   cheats;
     SceneTimeSet  timeset;
     SceneStats    stats;
     SceneRename   rename;
@@ -52,6 +64,5 @@ private:
     float transT_ = 0.0f;           // 0..1 slide progress
     Slide slide_ = Slide::None;
 
-    PowerManager power_;                     // device sleep: mode + button gestures + auto-sleep
-    SceneId      curScene_ = SceneId::Home;  // tracked so auto light-sleep only fires on Home
+    PowerManager power_;   // device sleep: mode + button gestures + auto-sleep
 };

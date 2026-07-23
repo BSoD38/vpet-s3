@@ -122,6 +122,16 @@ public:
     // is too undeveloped to train or fight. Gates the menu's Activities + Battle entries.
     bool     activitiesUnlocked() const { return s_.stage >= STAGE_IN_TRAINING_2; }
 
+    // --- DEV/CHEAT helpers (used only by the debug Cheats screen; bypass normal gating and
+    //     persist immediately). Kept as explicit named ops rather than exposing raw state. ---
+    void cheatRestore();                        // full HP/energy/hunger/happiness, cure sick, clear poop
+    void cheatSetHealth(float pct);             // 0..100
+    void cheatSetEnergy(float pct);             // 0..100 (stamina)
+    void cheatSetFriendship(int value);         // 0..1000
+    void cheatAdjustStat(StatId id, int delta); // nudge the trained modifier (clamped to 0..room)
+    void cheatMaxStat(StatId id);               // set the modifier so the effective stat hits its cap
+    void cheatSetSpecies(int creatureIdx);      // morph to any registry creature (keeps trained stats)
+
     // Apply a finished battle: write remaining HP% back to health, grant win/loss effects
     // (stats/friendship/happiness/W-L record) and roll exit-HP sickness. hpFrac = the player's
     // remaining HP / maxHP (0..1). Persists immediately; returns the outcome for the UI.

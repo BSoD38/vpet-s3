@@ -1,5 +1,7 @@
 #include "scene_run.hpp"
 #include "engine/gfx.hpp"
+#include "engine/minigame.hpp"     // shared READY energy line + game-over card
+#include "engine/training.hpp"     // grant_training() shared reward gate
 #include "core/app.hpp"
 #include "sim/creatures.hpp"        // Creature (runner sprite)
 #include "assets/sprites.hpp"   // spr_unknown_data (fallback), SPRITE_*
@@ -96,25 +98,20 @@ void SceneRun::award()
 {
     if (rewarded_) return;
     rewarded_ = true;
-    Pet& pet = app().pet;
+
+    // Running mainly trains Agility and Max HP (stamina). Cost scales with the score.
     int rawAgi = score_ * AGI_PER_PT / STAT_DIV;
     int rawHp  = score_ * HP_PER_PT / STAT_DIV;
+    float cost = ENERGY_RUN_BASE + (float)score_ * ENERGY_RUN_PER_PT;
 
-    // energy gate: not enough stamina -> proportionally reduced gains (and drain what's left)
-    float cost  = ENERGY_RUN_BASE + (float)score_ * ENERGY_RUN_PER_PT;
-    float have  = pet.energy();
-    float ratio = (cost <= 0.0f) ? 1.0f : (have >= cost ? 1.0f : have / cost);
-    tired_ = ratio < 0.999f;
-    gainAgi_ = (int)(rawAgi * ratio);
-    gainHp_  = (int)(rawHp  * ratio);
+    StatGain gains[] = { { STAT_AGI, rawAgi }, { STAT_MAXHP, rawHp } };
+    TrainingResult r = grant_training(app().pet, cost, gains, 2, 2 + score_ / 8);
 
-    pet.spendEnergy(have < cost ? have : cost);   // spend the run's cost, or drain what's left if short
-    pet.trainStat(STAT_AGI,   (uint32_t)gainAgi_);
-    pet.trainStat(STAT_MAXHP, (uint32_t)gainHp_);
-    pet.addFriendship(2 + score_ / 8);   // sharing the game builds the bond (not energy-gated)
-    pet.markSaved();                     // persist the run's gains
-    ESP_LOGI("RUN", "reward: score=%d +%d AGI +%d HP (energy %.0f cost %.0f x%.2f)",
-             score_, gainAgi_, gainHp_, have, cost, ratio);
+    tired_   = r.tired;
+    gainAgi_ = r.granted[STAT_AGI];
+    gainHp_  = r.granted[STAT_MAXHP];
+    ESP_LOGI("RUN", "reward: score=%d +%d AGI +%d HP (tired=%d spent=%.0f)",
+             score_, gainAgi_, gainHp_, r.tired ? 1 : 0, r.energySpent);
 }
 
 void SceneRun::onEnter() { reset(); }
@@ -164,7 +161,7 @@ void SceneRun::update(float dt)
         return;
     }
     if (phase_ == OVER) {
-        if (tap) app().setScene(SceneId::Menu, Slide::Iris); // tap to leave (iris)
+        if (tap) app().setScene(SceneId::Activities, Slide::Iris); // tap to return to the picker
         return;
     }
 
@@ -293,17 +290,13 @@ void SceneRun::render()
         gfx_text(24, 136, 1, col::white, "Tap to jump red hurdles.");
         gfx_text(24, 152, 1, col::white, "Run UNDER purple flyers.");
         gfx_text(24, 168, 1, col::white, "It speeds up as you go.");
-        int en = (int)app().pet.energy();
-        gfx_text(24, 186, 1, en < 25 ? col::warn : col::dim, "Energy %d/100%s", en, en < 25 ? "  (tired!)" : "");
+        mg_energy_readout(24, 186, (int)app().pet.energy());
         gfx_text(48, 210, 2, col::good, "TAP TO START");
     } else if (phase_ == OVER) {
-        fb.fillRoundRect(28, 104, GAME_W - 56, 96, 8, col::panel);
-        fb.drawRoundRect(28, 104, GAME_W - 56, 96, 8, col::warn);
-        gfx_text(62, 116, 2, col::warn, "GAME OVER");
-        gfx_text(76, 142, 2, col::white, "Score %d", score_);
-        gfx_text(52, 168, 1, tired_ ? col::warn : col::good,
-                 "+%d AGI  +%d HP%s", gainAgi_, gainHp_, tired_ ? "  tired!" : "");
-        gfx_text(74, 184, 1, col::dim, "Tap to exit");
+        mg_over_card("GAME OVER");
+        mg_center(MG_CARD_Y + 40, 2, col::white, "Score %d", score_);
+        mg_center(MG_CARD_Y + 68, 1, tired_ ? col::warn : col::good,
+                  "+%d AGI  +%d HP%s", gainAgi_, gainHp_, tired_ ? "  tired!" : "");
     }
 }
 

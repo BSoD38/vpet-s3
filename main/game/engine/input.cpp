@@ -50,4 +50,10 @@ void InputManager::poll(Input& in)
             lastPressUs_ = now;
         }
     }
+
+    // Motion snapshot. Accel is kept fresh (~10Hz) by the background sensor task
+    // (main.cpp Driver_Loop -> QMI8658_Loop); we just copy the latest values so scenes get
+    // a per-frame snapshot consistent with the touch state. A torn read across x/y/z is at
+    // worst a one-frame blip -- harmless for game input, so no locking needed.
+    in.ax = Accel.x; in.ay = Accel.y; in.az = Accel.z;
 }

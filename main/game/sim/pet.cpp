@@ -433,6 +433,59 @@ void Pet::addFriendship(int delta)
     s_.friendship = (uint16_t)v;
 }
 
+// --- DEV/CHEAT helpers (debug Cheats screen only) ---------------------------------------
+void Pet::cheatRestore()
+{
+    s_.health = 100; s_.energy = ENERGY_MAX;
+    s_.hunger = 100; s_.happiness = 100;
+    s_.sick = 0; s_.poop = 0;
+    markSaved();
+}
+
+void Pet::cheatSetHealth(float pct) { s_.health = clampf(pct, 0.0f, 100.0f);       markSaved(); }
+void Pet::cheatSetEnergy(float pct) { s_.energy = clampf(pct, 0.0f, ENERGY_MAX);   markSaved(); }
+
+void Pet::cheatSetFriendship(int value)
+{
+    if (value < 0) value = 0;
+    if (value > FRIEND_CAP) value = FRIEND_CAP;
+    s_.friendship = (uint16_t)value;
+    markSaved();
+}
+
+void Pet::cheatAdjustStat(StatId id, int delta)
+{
+    if (id >= STAT_COUNT) return;
+    uint32_t base = baseStat(id), cap = stat_cap(id);
+    uint32_t room = base >= cap ? 0 : cap - base;      // most the modifier may reach
+    long v = (long)s_.statMod[id] + delta;
+    if (v < 0) v = 0;
+    if (v > (long)room) v = (long)room;
+    s_.statMod[id] = (uint32_t)v;
+    markSaved();
+}
+
+void Pet::cheatMaxStat(StatId id)
+{
+    if (id >= STAT_COUNT) return;
+    uint32_t base = baseStat(id), cap = stat_cap(id);
+    s_.statMod[id] = base >= cap ? 0 : cap - base;     // effective stat hits its cap
+    markSaved();
+}
+
+void Pet::cheatSetSpecies(int creatureIdx)
+{
+    if (creatureIdx < 0 || creatureIdx >= reg_.count()) return;
+    idx_ = creatureIdx;
+    const Creature* c = cur();
+    if (c) {
+        strncpy(s_.creatureId, c->id, sizeof(s_.creatureId) - 1);
+        s_.creatureId[sizeof(s_.creatureId) - 1] = '\0';
+        s_.stage = c->tier;                            // keep trained mods / friendship (stat() re-clamps)
+    }
+    markSaved();
+}
+
 void Pet::recordWin()  { if (s_.wins   != 0xFFFFFFFFu) s_.wins++; }
 void Pet::recordLoss() { if (s_.losses != 0xFFFFFFFFu) s_.losses++; }
 

@@ -18,12 +18,30 @@ public:
     virtual void update(float dt) { (void)dt; }
     virtual void render() {}
     virtual void onInput(const Input& in) { (void)in; }
+
+    // May the device sleep (light/deep, auto or via the PWR button) while this scene is
+    // active? Default yes; timed/active scenes (minigame, battle) override to false so a
+    // nap or an idle timeout can't interrupt play. (Power-off is still allowed.)
+    virtual bool allowsSleep() const { return true; }
+
+    // How fast the pet CARE simulation advances while this scene is active, as a fraction
+    // in [0,1]. This is ORTHOGONAL to the user's gameSpeed multiplier: the loop ticks the
+    // sim by dt * gameSpeed * careSpeed, so the two compose and never conflict. Default 1
+    // (normal). In-play scenes (minigame, battle) override this so a long, active session
+    // doesn't starve/sadden the pet; the scaling is uniform, so aging/evolution slow too.
+    virtual float careSpeed() const { return 1.0f; }
 };
+
+// Care-sim speed while an "in-play" scene (minigame/battle) is active. 0 = frozen (no
+// hunger/health decay, poop, sickness, aging, or energy regen during play); 1 = no change.
+// Safe from parking exploits: these scenes are active/timed, so you can't idle in them.
+constexpr float IN_PLAY_CARE_SPEED = 0.0f;
 
 // Minimal single-scene manager (swap scenes with set()).
 class SceneManager {
     Scene* cur_ = nullptr;
 public:
+    Scene* current() const { return cur_; }
     void set(Scene* s) { if (cur_) cur_->onExit(); cur_ = s; if (cur_) cur_->onEnter(); }
     void update(float dt) { if (cur_) cur_->update(dt); }
     void render() { if (cur_) cur_->render(); }

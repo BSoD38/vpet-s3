@@ -12,6 +12,7 @@ idf_component_register(
                               "./game/engine/input.cpp"
                               "./game/engine/clock.cpp"
                               "./game/engine/power.cpp"
+                              "./game/engine/training.cpp"
 
                               # game: sim (simulation state + persistence)
                               "./game/sim/pet.cpp"
@@ -24,11 +25,17 @@ idf_component_register(
                               # game: scenes (screens, grouped by kind)
                               "./game/scenes/care/scene_home.cpp"
                               "./game/scenes/minigames/scene_run.cpp"
+                              "./game/scenes/minigames/scene_mindmaze.cpp"
+                              "./game/scenes/minigames/scene_smash.cpp"
+                              "./game/scenes/minigames/scene_bulwark.cpp"
+                              "./game/scenes/minigames/scene_stance.cpp"
                               "./game/scenes/battle/scene_battle.cpp"
                               "./game/scenes/battle/scene_battle_draw.cpp"
-                              "./game/scenes/battle/scene_battle_select.cpp"
+                              "./game/scenes/menus/scene_battle_select.cpp"
+                              "./game/scenes/menus/scene_activities.cpp"
                               "./game/scenes/menus/scene_menu.cpp"
                               "./game/scenes/menus/scene_settings.cpp"
+                              "./game/scenes/menus/scene_cheats.cpp"
                               "./game/scenes/menus/scene_timeset.cpp"
                               "./game/scenes/menus/scene_stats.cpp"
                               "./game/scenes/menus/scene_rename.cpp"

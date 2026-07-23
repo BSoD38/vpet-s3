@@ -31,10 +31,21 @@ Instead: **deep sleep with a periodic RTC-timer wake** (CPU wakes briefly every
 ## Light sleep
 
 Screen off, simulation still running. Entered by a short PWR press or after
-`AUTO_LIGHT_US` (3 min) of no input on Home; exited by any touch or PWR press. If nothing
-happens for `AUTO_DEEP_US` (15 min total idle) it **escalates to deep sleep** on its own —
-light sleep still runs the CPU at 240 MHz, so the real battery savings only start at deep
-sleep. (Manual deep sleep is the ~1 s PWR hold below.)
+`AUTO_LIGHT_US` (3 min) of no input; exited by any touch or PWR press. If nothing happens
+for `AUTO_DEEP_US` (15 min total idle) it **escalates to deep sleep** on its own — light
+sleep still runs the CPU at 240 MHz, so the real battery savings only start at deep sleep.
+(Manual deep sleep is the ~1 s PWR hold below.)
+
+### Where sleep is allowed
+
+Sleeping (light/deep, auto *or* button) is gated per-scene by
+[`Scene::allowsSleep()`](../main/game/core/scene.hpp) — default `true`, overridden to
+`false` in the timed/active scenes (the minigames under
+[`scenes/minigames/`](../main/game/scenes/minigames) and
+[`SceneBattle`](../main/game/scenes/battle/scene_battle.hpp)) so a nap or an idle
+timeout can't interrupt play. **Power-off (long hold) is exempt** — it works everywhere.
+(The battle *select* menu and the activities picker still allow sleep; only the live
+minigames/battle forbid it.)
 
 - Backlight forced dark via `Backlight_Suspend(1)` and the ST7789 put to `SLPIN`
   (`display.sleep()`). `Backlight_Suspend` remembers the pet's last scheduled brightness so
