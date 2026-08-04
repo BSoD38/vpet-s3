@@ -132,7 +132,7 @@ void SceneBattle::drawHud()
 void SceneBattle::drawBtn(int x, const char* label, bool armed, bool enabled, float pulse)
 {
     int bx = x + (int)shakeX_, by = BTN_Y + (int)shakeY_;
-    uint16_t base = !enabled ? rgb565(40, 42, 52) : (armed ? col::accent : rgb565(52, 58, 84));
+    uint16_t base = !enabled ? rgb565(40, 42, 52) : (armed ? col::accent : col::card);
     fb.fillRoundRect(bx, by, BTN_W, BTN_H, 7, base);
     int gh = (int)((BTN_H - 4) * 0.42f);
     fb.fillRoundRect(bx + 3, by + 2, BTN_W - 6, gh, 4, mix565(base, col::white, 0.32f));   // gloss

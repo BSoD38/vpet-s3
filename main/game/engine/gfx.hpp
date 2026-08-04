@@ -23,6 +23,7 @@ namespace col {
     static constexpr uint16_t ground = rgb565(95, 75, 50);
     static constexpr uint16_t grass  = rgb565(70, 180, 95);
     static constexpr uint16_t panel  = rgb565(30, 34, 52);
+    static constexpr uint16_t card   = rgb565(52, 58, 84);   // raised card on a panel background
     static constexpr uint16_t accent = rgb565(250, 190, 60);
     static constexpr uint16_t good   = rgb565(90, 210, 110);
     static constexpr uint16_t warn   = rgb565(235, 90, 80);
@@ -51,6 +52,30 @@ void gfx_present_cover(int fbX, uint16_t gapColor);     // old base; new (fb) co
 void gfx_present_reveal(int snapX, uint16_t gapColor);  // new (fb) base; old (snap) slides off (anticipation)
 void gfx_present_iris(bool useSnap, int radius);        // circular iris on snap (old) or fb (new)
 void gfx_text(int x, int y, uint8_t size, uint16_t color, const char* fmt, ...);
+
+// Single-line text truncated to fit `maxW` px, ending in ".." when it doesn't. Use this for
+// any DATA-DRIVEN string drawn inside a fixed box (food names/descriptions, creature names,
+// mod content): the author's text length isn't known at layout time, and it must never spill
+// past its card. Nested clip rects aren't an option here (LovyanGFX setClipRect replaces
+// rather than intersects, so it would break an enclosing ListView clip).
+void gfx_text_fit(int x, int y, int maxW, uint8_t size, uint16_t color, const char* fmt, ...);
+
+// --- Word-wrapped text ------------------------------------------------------------------
+// Greedy word wrap into a box `w` px wide (the default font cell is 6x8 at size 1, so both
+// axes scale linearly with `size`). Breaks at spaces, honours explicit '\n', and hard-breaks
+// any single word longer than the line. `lineGap` is extra spacing between baselines.
+//
+// `reveal` caps how many source characters are drawn, which is all a typewriter effect needs:
+// advance a float counter and pass it in (-1 = draw everything). The return value is always
+// the FULL line count regardless of `reveal`, so layout stays put while text types itself out.
+// `maxLines` (0 = unlimited) caps the block's height and elides the last line with ".." when
+// text remains. Essential for DATA-DRIVEN text in a fixed box: without it a long modded string
+// grows the block until it overlaps whatever sits below. Pass the same cap to the measure
+// calls so layout and rendering agree.
+int gfx_text_wrap(int x, int y, int w, uint8_t size, uint16_t color, const char* s,
+                  int lineGap = 2, int reveal = -1, int maxLines = 0);
+int gfx_text_wrap_lines(int w, uint8_t size, const char* s, int maxLines = 0);
+int gfx_text_wrap_height(int w, uint8_t size, const char* s, int lineGap = 2, int maxLines = 0);
 void gfx_bar(int x, int y, int w, int h, float frac,    // stat bar (0..1)
              uint16_t fg, uint16_t bg, uint16_t border);
 void gfx_blit(const Sprite& s, int cx, int cy);         // draw sprite centered at (cx,cy)

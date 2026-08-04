@@ -1,0 +1,49 @@
+{
+  "id": "any/late_night",
+  "title": "Very late",
+  "priority": 25,
+  "repeatable": true,
+  "when": {
+    "hourMin": 23,
+    "hourMax": 4
+  },
+  "start": "n0",
+  "nodes": [
+    {
+      "id": "n0",
+      "text": "It's very late. I'm not tired exactly. I just didn't want to be the only one awake.",
+      "choices": [
+        {
+          "text": "I'll stay a while",
+          "to": "stay",
+          "effects": {
+            "friendship": 3,
+            "happiness": 5,
+            "drift": { "social": 0.3, "energetic": -0.2 }
+          }
+        },
+        {
+          "text": "We should both sleep",
+          "to": "sleep",
+          "effects": {
+            "happiness": 2,
+            "drift": { "wild": -0.3 }
+          }
+        }
+      ]
+    },
+    {
+      "id": "stay",
+      "text": "Good. You don't have to talk. Just be here for a bit.",
+      "to": "stay2"
+    },
+    {
+      "id": "stay2",
+      "text": "That's it. That's all I wanted."
+    },
+    {
+      "id": "sleep",
+      "text": "You're right. I'll close my eyes if you close yours."
+    }
+  ]
+}

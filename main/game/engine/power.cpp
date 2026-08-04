@@ -2,6 +2,7 @@
 #include "sim/pet.hpp"
 #include "sim/save.hpp"
 #include "sim/creatures.hpp"
+#include "sim/personality.hpp"    // drift must ride along on headless catch-up
 #include "engine/display.hpp"     // display.sleep() / display.wakeup()
 
 #include "esp_log.h"
@@ -67,10 +68,21 @@ void power_service_timer_wake(SaveStore& save)
     uint8_t oldStage = save.load(pre) ? pre.stage : 0;
 
     // Advance the sim over the elapsed real time using the SAME path as a normal boot.
-    // Heap-allocated: the registry is ~10 KB and app_main's stack is small.
+    // Heap-allocated: the registries are ~15 KB and app_main's stack is small.
     CreatureRegistry* reg = new CreatureRegistry();
     reg->loadAll();
+    // The personality tracker MUST ride along, exactly as App::init wires it before
+    // pet.boot(): this headless path replays the elapsed window and persists lastUpdate,
+    // so any drift it skips is gone forever. Since an idle device lives almost entirely
+    // in these 15-min wake slices, omitting the sink made days of neglect produce zero
+    // idle drift -- the withdrawn traits were unreachable in the one scenario that earns
+    // them. (idleSecs_ is persisted across the slices, so periods complete correctly.)
+    PersonalityRegistry* preg = new PersonalityRegistry();
+    preg->loadAll();
+    PersonalityTracker* drift = new PersonalityTracker(save, *preg);
+    drift->boot();
     Pet* pet = new Pet(save, *reg);
+    pet->setDriftSink(drift);
     pet->boot();                    // seeds RTC, loads save, replays tick() + persists (markSaved)
     const PetState& p = pet->state();
 
@@ -95,6 +107,8 @@ void power_service_timer_wake(SaveStore& save)
              fired, wake ? "WAKE" : "re-sleep");
 
     delete pet;
+    delete drift;
+    delete preg;
     delete reg;
 
     if (!wake)

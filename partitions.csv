@@ -1,5 +1,20 @@
 # Name,     Type, SubType, Offset,   Size, Flags
-# Note: if you have increased the bootloader size, make sure to update the offsets to avoid overlap,,,,
-nvs,        data, nvs,      0x9000,  0x6000,
-factory,0,0,        0x10000, 3M,
+#
+# NVS MUST KEEP ITS 0x9000 OFFSET. Everything the player can't get back lives there -- the pet
+# blob, personality drift, conversation facts/seen-history, nickname, bond-rescale flag, tower
+# floor. NVS data sits at fixed flash addresses, so growing this partition IN PLACE keeps the
+# existing pages (init scans for them; the added pages read as free), whereas MOVING it would
+# abandon everything. Grow it by pushing the app later, never by relocating nvs.
+#
+# 128K here (was 24K) because the conversation system's bounded state scales with content: a
+# large modded library wants a much bigger seen-history ring than 256 entries, or old one-shot
+# conversations fall off the ring and start repeating. Flash is 16MB and this map ends ~6.5MB,
+# so the headroom is free.
+nvs,        data, nvs,      0x9000,  0x20000,
+# App partitions must be 64K-aligned (MMU page mapping), so the first boundary clear of a
+# 128K nvs is 0x30000. The 0x29000..0x30000 remainder is unavoidable slack.
+factory,    app,  factory,  0x30000, 3M,
 creatures,  data, fat,      ,        1M,
+# Shared read-only game data (foods, natures, personalities, conversations). One partition for
+# all data-driven systems rather than one per feature -- see docs/food-and-feeding.md.
+gamedata,   data, fat,      ,        2M,

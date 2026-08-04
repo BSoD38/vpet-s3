@@ -12,11 +12,15 @@ idf_component_register(
                               "./game/engine/input.cpp"
                               "./game/engine/clock.cpp"
                               "./game/engine/power.cpp"
-                              "./game/engine/training.cpp"
 
                               # game: sim (simulation state + persistence)
                               "./game/sim/pet.cpp"
+                              "./game/sim/training.cpp"
                               "./game/sim/creatures.cpp"
+                              "./game/sim/foods.cpp"
+                              "./game/sim/personality.cpp"
+                              "./game/sim/conversation.cpp"
+                              "./game/sim/gamedata.cpp"
                               "./game/sim/save.cpp"
 
                               # game: battle (headless combat core)
@@ -24,6 +28,8 @@ idf_component_register(
 
                               # game: scenes (screens, grouped by kind)
                               "./game/scenes/care/scene_home.cpp"
+                              "./game/scenes/care/scene_feed.cpp"
+                              "./game/scenes/care/scene_conversation.cpp"
                               "./game/scenes/minigames/scene_run.cpp"
                               "./game/scenes/minigames/scene_mindmaze.cpp"
                               "./game/scenes/minigames/scene_smash.cpp"
@@ -38,6 +44,7 @@ idf_component_register(
                               "./game/scenes/menus/scene_cheats.cpp"
                               "./game/scenes/menus/scene_timeset.cpp"
                               "./game/scenes/menus/scene_stats.cpp"
+                              "./game/scenes/menus/scene_journal.cpp"
                               "./game/scenes/menus/scene_rename.cpp"
 
                               # vendor drivers (C)
@@ -86,3 +93,8 @@ target_compile_options(${COMPONENT_LIB} PRIVATE
 # into a read-only FAT image and flash it to the `creatures` partition. Mounted at
 # /creatures on the device; SD-card creatures overlay it at runtime (SD wins on id clash).
 fatfs_create_rawflash_image(creatures "${CMAKE_CURRENT_SOURCE_DIR}/../flash_creatures" FLASH_IN_PROJECT)
+
+# Shared read-only game data (foods now, conversations next), packed from flash_gamedata/
+# into the `gamedata` partition and mounted at /gamedata. One partition for all
+# data-driven systems rather than one per feature -- see docs/food-and-feeding.md.
+fatfs_create_rawflash_image(gamedata "${CMAKE_CURRENT_SOURCE_DIR}/../flash_gamedata" FLASH_IN_PROJECT)

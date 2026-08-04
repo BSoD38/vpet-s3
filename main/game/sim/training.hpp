@@ -1,5 +1,5 @@
 #pragma once
-#include "sim/pet.hpp"
+#include "pet.hpp"   // same-folder include (training moved into sim/ alongside pet)
 
 // Shared training-reward helper for the minigames.
 //

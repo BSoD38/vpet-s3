@@ -1,0 +1,19 @@
+{
+  "id": "spicy_pod",
+  "name": "Spicy Pod",
+  "desc": "Fiery. Eyes water.",
+  "tags": ["spicy", "plant"],
+
+  "fills": 22,
+  "happiness": 6,
+  "health": 0,
+  "color": "#e8641e",
+
+  "drift": {
+    "energetic": 0.7,
+    "wild": 0.3
+  },
+
+  "cost": 25,
+  "rarity": "common"
+}

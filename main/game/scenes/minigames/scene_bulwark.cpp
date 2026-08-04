@@ -1,7 +1,7 @@
 #include "scene_bulwark.hpp"
+#include "minigame.hpp"        // shared READY energy line + game-over card
 #include "engine/gfx.hpp"
-#include "engine/minigame.hpp"        // shared READY energy line + game-over card
-#include "engine/training.hpp"        // grant_training() shared reward gate
+#include "sim/training.hpp"        // grant_training() shared reward gate
 #include "core/app.hpp"
 #include "assets/sprites.hpp"     // spr_unknown_data (fallback), SPRITE_*
 #include "esp_random.h"
@@ -118,6 +118,12 @@ void SceneBulwark::award()
 
     StatGain gains[] = { { STAT_END, rawEnd }, { STAT_AGI, rawAgi } };
     TrainingResult r = grant_training(app().pet, cost, gains, 2, 2 + score_ / 6);
+
+    // Disciplined bravery -- the deliberate brave+/wild- decorrelator. Without a source
+    // like this, "brave" and "unruly" would always move together and a whole quadrant of
+    // personalities would be unreachable. Validated by tools/personality_sim.py.
+    static const float DRIFT_BULWARK[AX_COUNT] = { 1.00f, 0.60f, -0.30f, -1.00f };
+    app().pet.nudgeDrift(DRIFT_BULWARK);
 
     tired_   = r.tired;
     gainEnd_ = r.granted[STAT_END];

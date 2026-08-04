@@ -1,0 +1,20 @@
+{
+  "id": "treat",
+  "name": "Sweet Treat",
+  "desc": "Sticky and irresistible.",
+  "tags": ["sweet", "snack"],
+
+  "fills": 10,
+  "happiness": 12,
+  "health": -4,
+  "color": "#f06fa8",
+
+  "drift": {
+    "energetic": 0.2,
+    "social": 0.4,
+    "wild": 0.6
+  },
+
+  "cost": 30,
+  "rarity": "common"
+}

@@ -1,0 +1,234 @@
+[
+  {
+    "id": "aloof/smalltalk",
+    "title": "The quiet",
+    "priority": 0,
+    "repeatable": true,
+    "when": {
+      "nature": "aloof"
+    },
+    "start": "n0",
+    "nodes": [
+      {
+        "id": "n0",
+        "text": "You don't have to say anything. I don't mind the quiet.",
+        "choices": [
+          {
+            "text": "(sit with them)",
+            "to": "sit",
+            "effects": {
+              "happiness": 3,
+              "drift": {
+                "energetic": -0.2
+              }
+            }
+          },
+          {
+            "text": "I'd rather talk",
+            "to": "talk",
+            "effects": {
+              "happiness": 2,
+              "drift": {
+                "social": 0.3
+              }
+            }
+          }
+        ]
+      },
+      {
+        "id": "sit",
+        "text": "Then we agree. That's the most I needed from today."
+      },
+      {
+        "id": "talk",
+        "text": "Oh. Then I suppose I'm listening. Go on."
+      }
+    ]
+  },
+  {
+    "id": "any/hungry",
+    "title": "Strange noises",
+    "priority": 20,
+    "repeatable": true,
+    "when": {
+      "hungry": true
+    },
+    "start": "n0",
+    "nodes": [
+      {
+        "id": "n0",
+        "text": "My stomach is making the strangest noises...",
+        "choices": [
+          {
+            "text": "I'll get you something",
+            "to": "food",
+            "effects": {
+              "happiness": 2,
+              "drift": {
+                "social": 0.2
+              }
+            }
+          },
+          {
+            "text": "Toughen up",
+            "to": "tough",
+            "effects": {
+              "happiness": -2,
+              "drift": {
+                "brave": 0.2,
+                "social": -0.2
+              }
+            }
+          }
+        ]
+      },
+      {
+        "id": "food",
+        "text": "Thank you. I was going to be brave about it for one more minute."
+      },
+      {
+        "id": "tough",
+        "text": "...I am being tough. Loudly. This is what tough sounds like."
+      }
+    ]
+  },
+  {
+    "id": "bold/smalltalk",
+    "title": "Ready for anything",
+    "priority": 0,
+    "repeatable": true,
+    "when": {
+      "nature": "bold"
+    },
+    "start": "n0",
+    "nodes": [
+      {
+        "id": "n0",
+        "text": "I could take on anything today. Anything!",
+        "choices": [
+          {
+            "text": "That's the spirit",
+            "to": "yes",
+            "effects": {
+              "happiness": 3,
+              "drift": {
+                "brave": 0.3
+              }
+            }
+          },
+          {
+            "text": "Easy now",
+            "to": "calm",
+            "effects": {
+              "happiness": 1,
+              "drift": {
+                "wild": -0.3
+              }
+            }
+          }
+        ]
+      },
+      {
+        "id": "yes",
+        "text": "I know! I might take on two things. Don't try to stop me."
+      },
+      {
+        "id": "calm",
+        "text": "Fine. I'll save it. It's going somewhere eventually, though."
+      }
+    ]
+  },
+  {
+    "id": "clever/smalltalk",
+    "title": "A secret",
+    "priority": 0,
+    "repeatable": true,
+    "when": {
+      "nature": "clever"
+    },
+    "start": "n0",
+    "nodes": [
+      {
+        "id": "n0",
+        "text": "I worked something out while you were away. I'm not going to tell you what. Not yet.",
+        "choices": [
+          {
+            "text": "Now I have to know",
+            "to": "push",
+            "effects": {
+              "happiness": 3,
+              "drift": {
+                "social": 0.2
+              }
+            }
+          },
+          {
+            "text": "Keep it, then",
+            "to": "keep",
+            "effects": {
+              "happiness": 2,
+              "drift": {
+                "wild": 0.2
+              }
+            }
+          }
+        ]
+      },
+      {
+        "id": "push",
+        "text": "Good. That was the entire point of mentioning it."
+      },
+      {
+        "id": "keep",
+        "text": "...You were meant to ask again. I'll allow one more attempt later."
+      }
+    ]
+  },
+  {
+    "id": "gentle/smalltalk",
+    "title": "Sitting together",
+    "priority": 0,
+    "repeatable": true,
+    "when": {
+      "nature": "gentle"
+    },
+    "start": "n0",
+    "nodes": [
+      {
+        "id": "n0",
+        "text": "It's nice just sitting here with you.",
+        "choices": [
+          {
+            "text": "It is",
+            "to": "agree",
+            "effects": {
+              "happiness": 3,
+              "drift": {
+                "social": 0.3
+              }
+            }
+          },
+          {
+            "text": "(lean a little closer)",
+            "to": "lean",
+            "effects": {
+              "happiness": 4,
+              "drift": {
+                "social": 0.3,
+                "energetic": -0.2
+              }
+            }
+          }
+        ]
+      },
+      {
+        "id": "agree",
+        "text": "I thought so. I wanted to check that we agreed."
+      },
+      {
+        "id": "lean",
+        "text": "Oh. Yes. That's better than answering."
+      }
+    ]
+  }
+]

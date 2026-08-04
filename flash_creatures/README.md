@@ -95,7 +95,7 @@ Condition fields on an edge (all optional; each defaults to "no requirement"):
 | `minEnd`          | effective Endurance ≥ value                          |
 | `minAgi`          | effective Agility ≥ value                            |
 | `minInt`          | effective Intellect ≥ value                          |
-| `minFriendship`   | bond meter ≥ value (0..1000)                         |
+| `minFriendship`   | bond meter ≥ value (0..10000; see FRIENDSHIP_MAX)    |
 | `maxCareMistakes` | care‑mistake count ≤ value (fewer = better care)    |
 
 Stat conditions test the **effective** stat (base + what you've trained). Two

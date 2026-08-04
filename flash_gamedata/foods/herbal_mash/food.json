@@ -1,0 +1,19 @@
+{
+  "id": "herbal_mash",
+  "name": "Herbal Mash",
+  "desc": "Warm and calming. Soothing.",
+  "tags": ["plant", "healthy", "calming"],
+
+  "fills": 20,
+  "happiness": 4,
+  "health": 8,
+  "color": "#7fc9c0",
+
+  "drift": {
+    "energetic": -0.7,
+    "wild": -0.3
+  },
+
+  "cost": 25,
+  "rarity": "common"
+}

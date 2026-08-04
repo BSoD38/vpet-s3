@@ -1,7 +1,7 @@
 #include "scene_smash.hpp"
+#include "minigame.hpp"        // shared READY energy line + game-over card
 #include "engine/gfx.hpp"
-#include "engine/minigame.hpp"        // shared READY energy line + game-over card
-#include "engine/training.hpp"        // grant_training() shared reward gate
+#include "sim/training.hpp"        // grant_training() shared reward gate
 #include "core/app.hpp"
 #include "assets/sprites.hpp"     // spr_unknown_data (fallback), SPRITE_*
 #include "esp_log.h"
@@ -75,6 +75,10 @@ void SceneSmash::award()
 
     StatGain gains[] = { { STAT_STR, rawStr }, { STAT_MAXHP, rawHp } };
     TrainingResult r = grant_training(app().pet, cost, gains, 2, 2 + score_ / 120);
+
+    // All-out and unrestrained. Validated as a set by tools/personality_sim.py.
+    static const float DRIFT_SMASH[AX_COUNT] = { 0.80f, 0.80f, -0.30f, 1.00f };
+    app().pet.nudgeDrift(DRIFT_SMASH);
 
     tired_   = r.tired;
     gainStr_ = r.granted[STAT_STR];

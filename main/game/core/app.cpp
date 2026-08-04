@@ -1,4 +1,5 @@
 #include "app.hpp"
+#include "sim/gamedata.hpp"      // gamedata_json_use_psram (process-wide cJSON policy)
 #include "engine/gfx.hpp"
 #include "esp_timer.h"
 #include "esp_log.h"
@@ -25,6 +26,26 @@ static float ease_in_back(float t) {            // winds back a touch, then acce
     return c3 * t * t * t - c1 * t * t;
 }
 
+// Everything a conversation gate is tested against. Built here so the conversation system
+// stays decoupled from Pet. NOTE: gates compare IDS, never display names.
+static ConvContext conv_ctx(const Pet& pet, const PersonalityTracker& drift)
+{
+    const PetState& p = pet.state();
+    ConvContext c{};
+    c.friendship = pet.friendship();
+    c.wins       = pet.wins();
+    c.stage      = p.stage;
+    c.nature     = drift.natureId();
+    c.trait      = drift.traitId();
+    c.species    = pet.creature() ? pet.creature()->id : "";
+    c.sick       = p.sick != 0;
+    c.hungry     = care_tier(p.hunger) <= CARE_TIER_NEEDY;   // == the attention-badge threshold
+    c.asleep     = p.lightsOff != 0;
+    c.hour       = pet.simHour();
+    c.mood       = pet.moodId();
+    return c;
+}
+
 void App::setScene(SceneId id, Slide slide)
 {
     // Freeze the current (outgoing) scene before swapping, then animate the new
@@ -37,6 +58,8 @@ void App::setScene(SceneId id, Slide slide)
     }
     switch (id) {
         case SceneId::Home:       scenes.set(&home);       break;
+        case SceneId::Feed:       scenes.set(&feedScene);  break;
+        case SceneId::Conversation: scenes.set(&conversationScene); break;
         case SceneId::Menu:       scenes.set(&menu);       break;
         case SceneId::Activities: scenes.set(&activities); break;
         case SceneId::Run:        scenes.set(&run);        break;
@@ -50,6 +73,7 @@ void App::setScene(SceneId id, Slide slide)
         case SceneId::Cheats:   scenes.set(&cheats);   break;
         case SceneId::TimeSet:  scenes.set(&timeset);  break;
         case SceneId::Stats:    scenes.set(&stats);    break;
+        case SceneId::Journal:  scenes.set(&journal);  break;
         case SceneId::Rename:   scenes.set(&rename);   break;
     }
 }
@@ -57,14 +81,26 @@ void App::setScene(SceneId id, Slide slide)
 void App::init()
 {
     gfx_init();                       // create the back-buffer (after Display_Init in main)
-    home.bind(*this); menu.bind(*this); activities.bind(*this); run.bind(*this); mindmaze.bind(*this);
+    home.bind(*this); feedScene.bind(*this); conversationScene.bind(*this);
+    menu.bind(*this); activities.bind(*this); run.bind(*this); mindmaze.bind(*this);
     smash.bind(*this); bulwark.bind(*this); stance.bind(*this);
     battle.bind(*this); battleSelect.bind(*this);
     settings.bind(*this); cheats.bind(*this); timeset.bind(*this);
-    stats.bind(*this); rename.bind(*this);
+    stats.bind(*this); journal.bind(*this); rename.bind(*this);
+
+    // Process-wide, and must precede every parse below: keeps JSON trees out of internal heap.
+    gamedata_json_use_psram();
 
     creatures.loadAll();              // load the creature roster before the pet resolves its id
+    foods.loadAll();                  // food list (independent of the pet; needed by the Feed picker)
+    personalities.loadAll();          // natures + traits, before any drift is evaluated
+    drift.boot();
+    conversations.init(save);         // mounts gamedata + loads facts/seen history
+    pet.setDriftSink(&drift);         // BEFORE pet.boot(): offline catch-up ticks the drift too
     pet.boot();                       // load save + offline aging, or hatch a new egg
+    // A brand-new creature starts with a blank slate: its predecessor's conversation history
+    // and journal don't belong to it. Player FACTS survive -- they're about the player.
+    if (pet.startedFresh()) conversations.clearSeen();
     debugOverlay = save.loadU8("dbg", 0) != 0;
     setScene(SceneId::Home);
 
@@ -115,6 +151,13 @@ void App::runLoop()
         if (!transitioning_) scenes.input(in);         // ignore taps mid-slide
 
         pet.tick(dt * (float)pet.state().gameSpeed * careMult);   // gameSpeed × per-scene care factor
+        // Time-sliced conversation selection: one file per frame, off the render path, so a
+        // large modded library never costs a frame. Real time (not gameSpeed) on purpose.
+        // MUST stay below the light-sleep `continue` above: with the screen off there is nobody
+        // to show a bubble to, and scanning would just burn battery. Scanning is additionally
+        // paused (allowScan=false) in the scenes that forbid sleeping -- minigames and battle
+        // are timing-critical, and one scan file costs ~7-12 ms of FAT+parse in a frame.
+        conversations.update(dt, conv_ctx(pet, drift), sleepAllowed);
         scenes.update(dt);
         scenes.render();                               // renders the (new) scene into fb
 

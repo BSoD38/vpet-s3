@@ -1,0 +1,16 @@
+{
+  "id": "kibble",
+  "name": "Basic Kibble",
+  "desc": "Plain, dependable pellets.",
+  "tags": ["staple"],
+
+  "fills": 30,
+  "happiness": 3,
+  "health": 0,
+  "color": "#a8823c",
+
+  "drift": {},
+
+  "cost": 0,
+  "rarity": "common"
+}

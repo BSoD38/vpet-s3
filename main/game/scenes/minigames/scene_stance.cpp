@@ -1,7 +1,7 @@
 #include "scene_stance.hpp"
+#include "minigame.hpp"        // shared READY energy line + game-over card
 #include "engine/gfx.hpp"
-#include "engine/minigame.hpp"        // shared READY energy line + game-over card
-#include "engine/training.hpp"        // grant_training() shared reward gate
+#include "sim/training.hpp"        // grant_training() shared reward gate
 #include "core/app.hpp"
 #include "assets/sprites.hpp"     // spr_unknown_data (fallback), SPRITE_*
 #include "esp_random.h"
@@ -90,6 +90,10 @@ void SceneStance::award()
 
     StatGain gains[] = { { STAT_END, rawEnd }, { STAT_MAXHP, rawHp } };
     TrainingResult r = grant_training(app().pet, cost, gains, 2, 2 + (int)survived_ / 8);
+
+    // Stillness and control. Validated as a set by tools/personality_sim.py.
+    static const float DRIFT_STANCE[AX_COUNT] = { 0.00f, -1.00f, -0.30f, -0.60f };
+    app().pet.nudgeDrift(DRIFT_STANCE);
 
     tired_   = r.tired;
     gainEnd_ = r.granted[STAT_END];

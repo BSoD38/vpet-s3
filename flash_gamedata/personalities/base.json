@@ -1,0 +1,77 @@
+[
+  {
+    "id": "sweet",
+    "name": "Sweet",
+    "nature": "gentle",
+    "angle": 20
+  },
+  {
+    "id": "dreamy",
+    "name": "Dreamy",
+    "nature": "gentle",
+    "angle": 115
+  },
+  {
+    "id": "shy",
+    "name": "Shy",
+    "nature": "gentle",
+    "angle": 265
+  },
+
+  {
+    "id": "brash",
+    "name": "Brash",
+    "nature": "bold",
+    "angle": 70
+  },
+  {
+    "id": "proud",
+    "name": "Proud",
+    "nature": "bold",
+    "angle": 190
+  },
+  {
+    "id": "fierce",
+    "name": "Fierce",
+    "nature": "bold",
+    "angle": 330
+  },
+
+  {
+    "id": "curious",
+    "name": "Curious",
+    "nature": "clever",
+    "angle": 45
+  },
+  {
+    "id": "sly",
+    "name": "Sly",
+    "nature": "clever",
+    "angle": 215
+  },
+  {
+    "id": "inventive",
+    "name": "Inventive",
+    "nature": "clever",
+    "angle": 300
+  },
+
+  {
+    "id": "grumpy",
+    "name": "Grumpy",
+    "nature": "aloof",
+    "angle": 45
+  },
+  {
+    "id": "lazy",
+    "name": "Lazy",
+    "nature": "aloof",
+    "angle": 115
+  },
+  {
+    "id": "stoic",
+    "name": "Stoic",
+    "nature": "aloof",
+    "angle": 240
+  }
+]

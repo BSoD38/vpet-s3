@@ -103,14 +103,31 @@ void BAT_Init(void)
 {
     ADC_Init();
 }
+// This ADC is a noisy single-shot: back-to-back reads of a resting battery swing by tens of
+// mV, which is enough to wobble the last pixel of the home-screen gauge several times a
+// second. Two stages of filtering, since a battery has no business moving that fast:
+// averaging a burst per call removes the per-sample noise, and the EMA on top (this runs at
+// 10 Hz from Driver_Loop) gives a ~2 s time constant.
+#define BAT_BURST  16      // oneshot reads averaged per call
+#define BAT_EMA    0.05f   // weight given to each new burst
+
 float BAT_Get_Volts(void)
 {
-    adc_oneshot_read(adc1_handle, EXAMPLE_ADC1_CHAN, &adc_raw[0][0]);                                                     
-    // printf( "ADC%d Channel[%d] Raw Data: %d\r\n", ADC_UNIT_1 + 1, EXAMPLE_ADC1_CHAN, adc_raw[0][0]);                                                
-    if (do_calibration1_chan3) {                                                                                           
-        ESP_ERROR_CHECK(adc_cali_raw_to_voltage(adc1_cali_chan3_handle, adc_raw[0][0], &voltage[0][0]));                    
-        // printf("ADC%d Channel[%d] Cali Voltage: %d mV\r\n", ADC_UNIT_1 + 1, EXAMPLE_ADC1_CHAN, voltage[0][0]);                
-        BAT_analogVolts = (float)(voltage[0][0] * 3.0 / 1000.0) / Measurement_offset;
+    int sum = 0, n = 0;
+    for (int i = 0; i < BAT_BURST; i++) {
+        if (adc_oneshot_read(adc1_handle, EXAMPLE_ADC1_CHAN, &adc_raw[0][0]) == ESP_OK) {
+            sum += adc_raw[0][0];
+            n++;
+        }
+    }
+    if (n && do_calibration1_chan3) {
+        ESP_ERROR_CHECK(adc_cali_raw_to_voltage(adc1_cali_chan3_handle, sum / n, &voltage[0][0]));
+        // printf("ADC%d Channel[%d] Cali Voltage: %d mV\r\n", ADC_UNIT_1 + 1, EXAMPLE_ADC1_CHAN, voltage[0][0]);
+        float v = (float)(voltage[0][0] * 3.0 / 1000.0) / Measurement_offset;
+        // The first reading seeds the filter rather than being averaged against 0 V, so the
+        // gauge is correct at boot instead of ramping up over the first few seconds.
+        BAT_analogVolts = (BAT_analogVolts <= 0.0f) ? v
+                                                   : BAT_analogVolts + BAT_EMA * (v - BAT_analogVolts);
         // printf("BAT voltage : %.2f V\r\n", BAT_analogVolts);
     }
     return BAT_analogVolts;

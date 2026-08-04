@@ -1,0 +1,408 @@
+[
+  {
+    "id": "player/first_question",
+    "title": "A real question",
+    "priority": 40,
+    "repeatable": false,
+    "when": {
+      "minFriendship": 500,
+      "minStage": 2
+    },
+    "start": "n0",
+    "nodes": [
+      {
+        "id": "n0",
+        "text": "Can I ask you something? A real question.",
+        "choices": [
+          {
+            "text": "Of course",
+            "to": "n1"
+          },
+          {
+            "text": "(not right now)",
+            "to": "later",
+            "effects": {
+              "happiness": -2
+            }
+          }
+        ]
+      },
+      {
+        "id": "later",
+        "text": "All right. It'll still be a question tomorrow."
+      },
+      {
+        "id": "n1",
+        "text": "What do you love doing most, when you're not with me?",
+        "choices": [
+          {
+            "text": "Going somewhere I've never been",
+            "to": "explore",
+            "effects": {
+              "setFact": {
+                "player_likes": "explore"
+              },
+              "factNote": "You love going somewhere new.",
+              "friendship": 40
+            }
+          },
+          {
+            "text": "Honestly? Doing very little",
+            "to": "rest",
+            "effects": {
+              "setFact": {
+                "player_likes": "rest"
+              },
+              "factNote": "You treasure doing very little.",
+              "friendship": 40
+            }
+          },
+          {
+            "text": "Building things that didn't exist",
+            "to": "make",
+            "effects": {
+              "setFact": {
+                "player_likes": "make"
+              },
+              "factNote": "You love building new things.",
+              "friendship": 40
+            }
+          }
+        ]
+      },
+      {
+        "id": "explore",
+        "text": "Somewhere new. I'll try to be brave enough to keep up with you."
+      },
+      {
+        "id": "rest",
+        "text": "Doing very little. Together, I hope. I'm extremely good at very little."
+      },
+      {
+        "id": "make",
+        "text": "Building things. Then I'd like to sit and watch you do that."
+      }
+    ]
+  },
+  {
+    "id": "player/likes_callback",
+    "title": "Where we'd go",
+    "priority": 30,
+    "repeatable": false,
+    "when": {
+      "requireSeen": "player/first_question",
+      "fact": {
+        "player_likes": "explore"
+      }
+    },
+    "start": "n0",
+    "nodes": [
+      {
+        "id": "n0",
+        "text": "You said you like going somewhere new. Where would we go, if we could go anywhere?",
+        "choices": [
+          {
+            "text": "Somewhere with no maps",
+            "to": "nomaps",
+            "effects": {
+              "friendship": 30,
+              "happiness": 5,
+              "drift": {
+                "brave": 0.4,
+                "wild": 0.3
+              }
+            }
+          },
+          {
+            "text": "Somewhere quiet, and new",
+            "to": "quietnew",
+            "effects": {
+              "friendship": 30,
+              "happiness": 5,
+              "drift": {
+                "energetic": -0.4
+              }
+            }
+          }
+        ]
+      },
+      {
+        "id": "nomaps",
+        "text": "No maps. Then we'd be the first ones to know what's out there.",
+        "to": "nomaps2"
+      },
+      {
+        "id": "nomaps2",
+        "text": "I'd like that. I'd be frightened the whole way. I'd still like it."
+      },
+      {
+        "id": "quietnew",
+        "text": "Quiet AND new. I didn't know you were allowed both. Good."
+      }
+    ]
+  },
+  {
+    "id": "player/making_up",
+    "title": "Making up",
+    "priority": 90,
+    "repeatable": true,
+    "when": {
+      "mood": "upset"
+    },
+    "start": "n0",
+    "nodes": [
+      {
+        "id": "n0",
+        "text": "You've been kind to me since. I noticed. I'm not very good at staying upset.",
+        "choices": [
+          {
+            "text": "I'm sorry. It did matter",
+            "to": "mend",
+            "effects": {
+              "friendship": 45,
+              "happiness": 15,
+              "setMood": "ok",
+              "drift": {
+                "social": 0.5
+              }
+            }
+          },
+          {
+            "text": "(sit down beside them)",
+            "to": "mend_quiet",
+            "effects": {
+              "friendship": 35,
+              "happiness": 12,
+              "setMood": "ok",
+              "drift": {
+                "social": 0.4,
+                "energetic": -0.2
+              }
+            }
+          },
+          {
+            "text": "Let's not talk about it",
+            "to": "unresolved",
+            "effects": {
+              "happiness": -5,
+              "drift": {
+                "social": -0.3
+              }
+            }
+          }
+        ]
+      },
+      {
+        "id": "mend",
+        "text": "Then we're all right. I'd rather be all right than be owed something.",
+        "to": "mend2"
+      },
+      {
+        "id": "mend2",
+        "text": "Come here. I've been saving up being pleased to see you."
+      },
+      {
+        "id": "mend_quiet",
+        "text": "Oh. Yes. This is better than talking about it.",
+        "to": "mend_quiet2"
+      },
+      {
+        "id": "mend_quiet2",
+        "text": "We can just do this instead. I'd like that."
+      },
+      {
+        "id": "unresolved",
+        "text": "All right. I'll wait. I'm good at waiting, apparently."
+      }
+    ]
+  },
+  {
+    "id": "player/long_absence",
+    "title": "You were gone",
+    "priority": 50,
+    "repeatable": false,
+    "when": {
+      "minFriendship": 1500,
+      "minStage": 3,
+      "mood": "ok"
+    },
+    "start": "n0",
+    "nodes": [
+      {
+        "id": "n0",
+        "text": "I want to say something and I've been practising it. You were gone a long time. I didn't like it.",
+        "choices": [
+          {
+            "text": "I'm sorry. I should have been here",
+            "to": "sorry",
+            "effects": {
+              "friendship": 25,
+              "happiness": 6,
+              "drift": {
+                "social": 0.4
+              }
+            }
+          },
+          {
+            "text": "I can't always be here",
+            "to": "honest",
+            "effects": {
+              "friendship": 5,
+              "drift": {
+                "social": -0.2
+              }
+            }
+          },
+          {
+            "text": "It's not that important",
+            "to": "dismissed",
+            "effects": {
+              "friendship": -30,
+              "happiness": -18,
+              "setMood": "hurt",
+              "drift": {
+                "social": -0.4
+              }
+            }
+          }
+        ]
+      },
+      {
+        "id": "sorry",
+        "text": "Oh. I had a whole second part prepared and now I don't need it.",
+        "to": "sorry2"
+      },
+      {
+        "id": "sorry2",
+        "text": "Thank you for saying it out loud. I'll stop practising now."
+      },
+      {
+        "id": "honest",
+        "text": "I know. I do know that.",
+        "to": "honest2"
+      },
+      {
+        "id": "honest2",
+        "text": "I just wanted you to know the room is very quiet without you in it.",
+        "choices": [
+          {
+            "text": "I'll tell you when I'm going",
+            "to": "promise",
+            "effects": {
+              "friendship": 20,
+              "happiness": 5,
+              "drift": {
+                "social": 0.3
+              }
+            }
+          },
+          {
+            "text": "(say nothing)",
+            "to": "silence",
+            "effects": {
+              "happiness": -4,
+              "drift": {
+                "social": -0.2
+              }
+            }
+          }
+        ]
+      },
+      {
+        "id": "promise",
+        "text": "That would help. That would help a lot, actually."
+      },
+      {
+        "id": "silence",
+        "text": "That's all right. I said the thing. That was the hard part."
+      },
+      {
+        "id": "dismissed",
+        "text": "...Oh.",
+        "to": "dismissed2"
+      },
+      {
+        "id": "dismissed2",
+        "text": "No, you're right. It isn't important. I won't bring it up again.",
+        "to": "dismissed3"
+      },
+      {
+        "id": "dismissed3",
+        "text": "I'd like to be by myself for a while now."
+      }
+    ]
+  },
+  {
+    "id": "player/what_should_i_be",
+    "title": "What I should be",
+    "priority": 45,
+    "repeatable": false,
+    "when": {
+      "minFriendship": 500,
+      "minStage": 2
+    },
+    "start": "n0",
+    "nodes": [
+      {
+        "id": "n0",
+        "text": "Can I ask something big? When you think of me, what am I to you?",
+        "choices": [
+          {
+            "text": "A friend, first",
+            "to": "friend",
+            "effects": {
+              "friendship": 30,
+              "setFact": {
+                "pet_role": "friend"
+              },
+              "factNote": "You think of them as a friend first.",
+              "drift": {
+                "social": 0.4
+              }
+            }
+          },
+          {
+            "text": "Someone who fights beside me",
+            "to": "fighter",
+            "effects": {
+              "friendship": 30,
+              "setFact": {
+                "pet_role": "fighter"
+              },
+              "factNote": "You want them at your side in a fight.",
+              "drift": {
+                "brave": 0.4
+              }
+            }
+          },
+          {
+            "text": "Company. That's enough",
+            "to": "company",
+            "effects": {
+              "friendship": 30,
+              "setFact": {
+                "pet_role": "company"
+              },
+              "factNote": "You wanted company. That was enough.",
+              "drift": {
+                "energetic": -0.3
+              }
+            }
+          }
+        ]
+      },
+      {
+        "id": "friend",
+        "text": "A friend. I'll be careful with that. I know it isn't a small word."
+      },
+      {
+        "id": "fighter",
+        "text": "Then I'll get stronger. Not for me. So that you're never standing alone."
+      },
+      {
+        "id": "company",
+        "text": "Company. That isn't a small thing either. I'm already good at being here."
+      }
+    ]
+  }
+]

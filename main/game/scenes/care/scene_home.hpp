@@ -1,5 +1,6 @@
 #pragma once
 #include "core/scene.hpp"
+#include "ui/widgets.hpp"          // Rect (speech-bubble hit target)
 
 // Home / care screen: shows the pet, a HUD (stats + battery + clock), a MENU button,
 // and lets you pet the creature by rubbing a finger over it (raises happiness).
@@ -24,6 +25,12 @@ class SceneHome : public Scene {
     bool    rubbingNow_ = false;   // finger over the pet and moving this frame
     bool    overPet_ = false;      // debug: finger over the pet zone this frame
     float   lastMove_ = 0.0f;      // debug: last per-frame movement (px)
+    // Battery gauge: latched on a slow timer rather than re-read per frame.
+    float   batTimer_ = 0.0f;      // seconds until the next re-read
+    int     batPct_ = -1;          // last sampled charge % (-1 = never sampled)
+    // Speech-bubble hit target. Computed in render() because it tracks the sprite's height;
+    // zero-width when no conversation is waiting.
+    Rect    bubble_{ 0, 0, 0, 0 };
 public:
     void update(float dt) override;
     void render() override;

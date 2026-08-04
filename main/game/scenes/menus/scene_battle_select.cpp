@@ -1,7 +1,7 @@
 #include "scene_battle_select.hpp"
 #include "core/app.hpp"
 #include "engine/gfx.hpp"
-#include "engine/widgets.hpp"
+#include "ui/widgets.hpp"
 #include "scenes/battle/scene_battle.hpp"   // BattleMode
 
 // mode cards + back button (this screen's Back sits bottom-center, not the shared top-right slot)
@@ -23,13 +23,13 @@ void SceneBattleSelect::render()
     bool boss = (floor % 5 == 0);
 
     // Quick Battle
-    QK_CARD.fill(rgb565(52, 58, 84), 10);
+    QK_CARD.fill(col::card, 10);
     QK_CARD.outline(col::accent, 10);
     gfx_text(CARD_X + 16, QK_Y + 14, 2, col::white, "QUICK BATTLE");
     gfx_text(CARD_X + 16, QK_Y + 42, 1, col::dim, "vs a similar-tier rival");
 
     // Tower
-    TW_CARD.fill(rgb565(52, 58, 84), 10);
+    TW_CARD.fill(col::card, 10);
     TW_CARD.outline(boss ? col::warn : col::accent, 10);
     gfx_text(CARD_X + 16, TW_Y + 12, 2, col::white, "TOWER");
     gfx_text(CARD_X + 16, TW_Y + 40, 1, boss ? col::warn : col::dim,

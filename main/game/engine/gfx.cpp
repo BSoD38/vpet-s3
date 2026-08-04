@@ -3,6 +3,7 @@
 #include <cstdarg>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <cmath>
 #include <initializer_list>
 
@@ -98,6 +99,104 @@ void gfx_text(int x, int y, uint8_t size, uint16_t color, const char* fmt, ...)
     fb.setTextSize(size);
     fb.setCursor(x, y);
     fb.print(buf);
+}
+
+void gfx_text_fit(int x, int y, int maxW, uint8_t size, uint16_t color, const char* fmt, ...)
+{
+    char buf[96];
+    va_list ap;
+    va_start(ap, fmt);
+    vsnprintf(buf, sizeof(buf), fmt, ap);
+    va_end(ap);
+
+    const int cw = 6 * size;                       // default font cell, scaled
+    const int cols = (cw > 0) ? maxW / cw : 0;
+    if (cols <= 0) return;
+
+    if ((int)strlen(buf) > cols) {                 // too long: cut and mark the elision
+        if (cols >= 3) { buf[cols - 2] = '.'; buf[cols - 1] = '.'; }
+        buf[cols] = '\0';
+    }
+    fb.setTextColor(color);
+    fb.setTextSize(size);
+    fb.setCursor(x, y);
+    fb.print(buf);
+}
+
+// Shared wrap engine for gfx_text_wrap / _lines / _height: walks the string once, laying out
+// one line per iteration. Always runs to the end of the string (even when `reveal` has already
+// been exhausted) so the returned line count reflects the whole text, not just the visible part.
+static int wrap_core(int x, int y, int w, uint8_t size, uint16_t color, const char* s,
+                     int lineGap, int reveal, bool draw, int maxLines)
+{
+    if (!s || !*s || size == 0) return 0;
+    const int cw = 6 * size, ch = 8 * size;
+    int cols = w / cw;
+    if (cols < 1) cols = 1;
+
+    if (draw) { fb.setTextColor(color); fb.setTextSize(size); }
+
+    int lines = 0, consumed = 0;
+    for (const char* p = s; *p; ) {
+        // Longest prefix that fits, remembering the last space we could break at.
+        int take = 0, brk = -1;
+        while (p[take] && take < cols && p[take] != '\n') {
+            if (p[take] == ' ') brk = take;
+            take++;
+        }
+        int skip = 0;                                  // consumed but not drawn (the break char)
+        if      (p[take] == '\n') skip = 1;            // explicit line break
+        else if (p[take] == ' ')  skip = 1;            // fits exactly, break on the space
+        else if (p[take] != '\0' && brk >= 0) { take = brk; skip = 1; }   // back up to the space
+        // (no space to back up to -> hard-break a too-long word at `cols`)
+
+        // On the last permitted line, if text still follows, end it in ".." so the reader can
+        // tell it was cut. Only when the line is fully typed, so the typewriter doesn't show
+        // an ellipsis before it has got there.
+        const bool lastAllowed = (maxLines > 0 && lines == maxLines - 1);
+        const bool moreAfter   = (p[take + skip] != '\0');
+
+        if (draw && take > 0) {
+            int n = take;
+            if (reveal >= 0) {
+                int room = reveal - consumed;
+                n = (room <= 0) ? 0 : (room < n ? room : n);
+            }
+            const bool elide = lastAllowed && moreAfter && n == take;
+            if (elide && n > 2) n -= 2;
+            if (n > 0) {
+                char buf[48];
+                if (n > (int)sizeof buf - 3) n = (int)sizeof buf - 3;
+                memcpy(buf, p, (size_t)n);
+                buf[n] = '\0';
+                if (elide) { buf[n] = '.'; buf[n + 1] = '.'; buf[n + 2] = '\0'; }
+                fb.setCursor(x, y + lines * (ch + lineGap));
+                fb.print(buf);
+            }
+        }
+        consumed += take + skip;
+        lines++;
+        p += take + skip;
+        if (maxLines > 0 && lines >= maxLines) break;
+    }
+    return lines;
+}
+
+int gfx_text_wrap(int x, int y, int w, uint8_t size, uint16_t color, const char* s,
+                  int lineGap, int reveal, int maxLines)
+{
+    return wrap_core(x, y, w, size, color, s, lineGap, reveal, true, maxLines);
+}
+
+int gfx_text_wrap_lines(int w, uint8_t size, const char* s, int maxLines)
+{
+    return wrap_core(0, 0, w, size, 0, s, 0, -1, false, maxLines);
+}
+
+int gfx_text_wrap_height(int w, uint8_t size, const char* s, int lineGap, int maxLines)
+{
+    int n = wrap_core(0, 0, w, size, 0, s, lineGap, -1, false, maxLines);
+    return n <= 0 ? 0 : n * (8 * size + lineGap) - lineGap;
 }
 
 void gfx_bar(int x, int y, int w, int h, float frac,

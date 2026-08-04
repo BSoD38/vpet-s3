@@ -1,7 +1,7 @@
 #include "scene_run.hpp"
+#include "minigame.hpp"        // shared READY energy line + game-over card
 #include "engine/gfx.hpp"
-#include "engine/minigame.hpp"     // shared READY energy line + game-over card
-#include "engine/training.hpp"     // grant_training() shared reward gate
+#include "sim/training.hpp"     // grant_training() shared reward gate
 #include "core/app.hpp"
 #include "sim/creatures.hpp"        // Creature (runner sprite)
 #include "assets/sprites.hpp"   // spr_unknown_data (fallback), SPRITE_*
@@ -106,6 +106,11 @@ void SceneRun::award()
 
     StatGain gains[] = { { STAT_AGI, rawAgi }, { STAT_MAXHP, rawHp } };
     TrainingResult r = grant_training(app().pet, cost, gains, 2, 2 + score_ / 8);
+
+    // Which games you pick shapes temperament, not just stats: running is energetic and
+    // fairly disciplined. Validated as a set by tools/personality_sim.py.
+    static const float DRIFT_RUN[AX_COUNT] = { 0.30f, 1.00f, -0.30f, -0.20f };
+    app().pet.nudgeDrift(DRIFT_RUN);
 
     tired_   = r.tired;
     gainAgi_ = r.granted[STAT_AGI];

@@ -1,0 +1,200 @@
+[
+  {
+    "id": "brash/strongest",
+    "title": "The strongest",
+    "priority": 5,
+    "repeatable": true,
+    "when": {
+      "personality": "brash"
+    },
+    "start": "n0",
+    "nodes": [
+      {
+        "id": "n0",
+        "text": "I have decided something important. I am the strongest thing in this entire box.",
+        "choices": [
+          {
+            "text": "You absolutely are",
+            "to": "agree",
+            "effects": {
+              "happiness": 4,
+              "drift": {
+                "brave": 0.3,
+                "wild": 0.2
+              }
+            }
+          },
+          {
+            "text": "It is quite a small box",
+            "to": "deflate",
+            "effects": {
+              "happiness": 1,
+              "drift": {
+                "wild": -0.2,
+                "energetic": -0.1
+              }
+            }
+          }
+        ]
+      },
+      {
+        "id": "agree",
+        "text": "I KNEW it. I could feel it in my arms. Do I have arms? It doesn't matter."
+      },
+      {
+        "id": "deflate",
+        "text": "...I am choosing not to hear that. The claim stands."
+      }
+    ]
+  },
+  {
+    "id": "curious/the_light",
+    "title": "About the light",
+    "priority": 5,
+    "repeatable": true,
+    "when": {
+      "personality": "curious"
+    },
+    "start": "n0",
+    "nodes": [
+      {
+        "id": "n0",
+        "text": "I've been wondering. Does the light outside start in the same place every day, or does it move?",
+        "choices": [
+          {
+            "text": "It moves. We're moving too, actually",
+            "to": "moving",
+            "effects": {
+              "friendship": 3,
+              "happiness": 4,
+              "drift": {
+                "energetic": 0.2,
+                "social": 0.2
+              }
+            }
+          },
+          {
+            "text": "Honestly? I don't know either",
+            "to": "neither",
+            "effects": {
+              "happiness": 3,
+              "drift": {
+                "social": 0.3
+              }
+            }
+          }
+        ]
+      },
+      {
+        "id": "moving",
+        "text": "We're MOVING? Right now? Nobody told me. I need a moment with this.",
+        "to": "settle"
+      },
+      {
+        "id": "settle",
+        "text": "No, it's good. I like that we're going somewhere. Even sitting still."
+      },
+      {
+        "id": "neither",
+        "text": "Good. Then we can not know it together. That's almost better than knowing."
+      }
+    ]
+  },
+  {
+    "id": "shy/quiet_thought",
+    "title": "A quiet thought",
+    "priority": 5,
+    "repeatable": true,
+    "when": {
+      "personality": "shy"
+    },
+    "start": "n0",
+    "nodes": [
+      {
+        "id": "n0",
+        "text": "I had a thought about you earlier. I didn't say it then. I'm saying it now.",
+        "choices": [
+          {
+            "text": "Go on, I'm listening",
+            "to": "tell",
+            "effects": {
+              "happiness": 3,
+              "drift": {
+                "social": 0.3
+              }
+            }
+          },
+          {
+            "text": "Another time, maybe",
+            "to": "keeps",
+            "effects": {
+              "happiness": -1,
+              "drift": {
+                "social": -0.2
+              }
+            }
+          }
+        ]
+      },
+      {
+        "id": "tell",
+        "text": "It was only that I'm glad it's you.",
+        "to": "whole"
+      },
+      {
+        "id": "whole",
+        "text": "That's the whole thought. You can go back to what you were doing now."
+      },
+      {
+        "id": "keeps",
+        "text": "That's all right. It'll keep. It's been keeping for a while already."
+      }
+    ]
+  },
+  {
+    "id": "stoic/nothing_much",
+    "title": "Nothing much",
+    "priority": 5,
+    "repeatable": true,
+    "when": {
+      "personality": "stoic"
+    },
+    "start": "n0",
+    "nodes": [
+      {
+        "id": "n0",
+        "text": "Nothing happened today. I thought you might want to know that too.",
+        "choices": [
+          {
+            "text": "Quiet is good",
+            "to": "quiet",
+            "effects": {
+              "happiness": 3,
+              "drift": {
+                "energetic": -0.3
+              }
+            }
+          },
+          {
+            "text": "Nothing at all?",
+            "to": "press",
+            "effects": {
+              "happiness": 2,
+              "drift": {
+                "social": 0.2
+              }
+            }
+          }
+        ]
+      },
+      {
+        "id": "quiet",
+        "text": "Yes. I have been thinking that for several hours now."
+      },
+      {
+        "id": "press",
+        "text": "There was a sound, at one point. I chose not to investigate it."
+      }
+    ]
+  }
+]

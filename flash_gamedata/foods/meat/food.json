@@ -1,0 +1,19 @@
+{
+  "id": "meat",
+  "name": "Meat Slab",
+  "desc": "Raw, hearty, a bit wild.",
+  "tags": ["meat", "protein"],
+
+  "fills": 32,
+  "happiness": 5,
+  "health": 0,
+  "color": "#c2452f",
+
+  "drift": {
+    "brave": 0.5,
+    "wild": 0.3
+  },
+
+  "cost": 25,
+  "rarity": "common"
+}

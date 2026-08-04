@@ -1,0 +1,34 @@
+[
+  {
+    "id": "gentle",
+    "name": "Gentle",
+    "ideal": {
+      "brave": -1,
+      "social": 1
+    }
+  },
+  {
+    "id": "bold",
+    "name": "Bold",
+    "ideal": {
+      "brave": 1,
+      "social": 1
+    }
+  },
+  {
+    "id": "clever",
+    "name": "Clever",
+    "ideal": {
+      "brave": 1,
+      "social": -1
+    }
+  },
+  {
+    "id": "aloof",
+    "name": "Aloof",
+    "ideal": {
+      "brave": -1,
+      "social": -1
+    }
+  }
+]

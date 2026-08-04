@@ -1,7 +1,7 @@
 #include "scene_mindmaze.hpp"
+#include "minigame.hpp"        // shared READY energy line + game-over card
 #include "engine/gfx.hpp"
-#include "engine/minigame.hpp"     // shared READY energy line + game-over card
-#include "engine/training.hpp"     // grant_training() shared reward gate
+#include "sim/training.hpp"     // grant_training() shared reward gate
 #include "core/app.hpp"
 #include "assets/sprites.hpp"  // spr_unknown_data (fallback), SPRITE_*
 #include "esp_random.h"
@@ -77,6 +77,11 @@ void SceneMindMaze::award()
 
     StatGain gains[] = { { STAT_INT, rawInt } };
     TrainingResult r = grant_training(app().pet, cost, gains, 1, 2 + completed_ / 4);
+
+    // Quiet, cerebral, self-directed -- and the main NON-neglectful route to a timid,
+    // independent temperament. Validated as a set by tools/personality_sim.py.
+    static const float DRIFT_MAZE[AX_COUNT] = { -0.30f, -0.60f, -0.30f, -0.80f };
+    app().pet.nudgeDrift(DRIFT_MAZE);
 
     tired_   = r.tired;
     gainInt_ = r.granted[STAT_INT];

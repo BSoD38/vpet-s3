@@ -1,8 +1,8 @@
 #include "scene_settings.hpp"
 #include "core/app.hpp"
 #include "engine/gfx.hpp"
-#include "engine/tabs.hpp"
-#include "engine/widgets.hpp"
+#include "ui/tabs.hpp"
+#include "ui/widgets.hpp"
 #include <cstring>
 #include <cstdio>
 

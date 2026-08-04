@@ -1,4 +1,5 @@
 #include "creatures.hpp"
+#include "gamedata.hpp"                   // gd_num/gd_str (shared JSON accessors)
 #include "engine/gfx.hpp"                 // SPRITE_TRANSP, display
 #include "esp_vfs_fat.h"
 #include "esp_log.h"
@@ -40,29 +41,14 @@ static char* read_file(const char* path, long* out_len)
     return buf;
 }
 
-static double jnum(cJSON* o, const char* k, double def)
-{
-    if (!o) return def;
-    cJSON* v = cJSON_GetObjectItem(o, k);
-    return cJSON_IsNumber(v) ? v->valuedouble : def;
-}
-
-static void jstr(cJSON* o, const char* k, char* dst, int n, const char* def)
-{
-    const char* s = def;
-    if (o) {
-        cJSON* v = cJSON_GetObjectItem(o, k);
-        if (cJSON_IsString(v) && v->valuestring) s = v->valuestring;
-    }
-    strncpy(dst, s, n - 1);
-    dst[n - 1] = '\0';
-}
+// JSON field accessors come from sim/gamedata (gd_num/gd_str); the binary whole-file
+// reader above stays local because it also loads PNGs (length out-param, 256 KB cap).
 
 // Map the optional "attribute" string to the battle type enum (default Free).
 static uint8_t parse_attribute(cJSON* o)
 {
     char s[16];
-    jstr(o, "attribute", s, sizeof s, "free");
+    gd_str(o, "attribute", s, sizeof s, "free");
     if (strcasecmp(s, "vaccine") == 0) return ATTR_VACCINE;
     if (strcasecmp(s, "data")    == 0) return ATTR_DATA;
     if (strcasecmp(s, "virus")   == 0) return ATTR_VIRUS;
@@ -148,27 +134,27 @@ bool CreatureRegistry::parseFile(const char* path, Creature& c)
     if (!root) { ESP_LOGW(TAG, "bad json: %s", path); return false; }
 
     memset(&c, 0, sizeof c);
-    jstr(root, "id",   c.id,   sizeof c.id,   "");
-    jstr(root, "name", c.name, sizeof c.name, "?");
-    c.tier = (uint8_t)jnum(root, "tier", 0);
+    gd_str(root, "id",   c.id,   sizeof c.id,   "");
+    gd_str(root, "name", c.name, sizeof c.name, "?");
+    c.tier = (uint8_t)gd_num(root, "tier", 0);
     c.attribute = parse_attribute(root);
 
     cJSON* base = cJSON_GetObjectItem(root, "base");
-    c.baseHp  = (uint32_t)jnum(base, "hp",  0);
-    c.baseStr = (uint16_t)jnum(base, "str", 0);
-    c.baseEnd = (uint16_t)jnum(base, "end", 0);
-    c.baseAgi = (uint16_t)jnum(base, "agi", 0);
-    c.baseInt = (uint16_t)jnum(base, "int", 0);
+    c.baseHp  = (uint32_t)gd_num(base, "hp",  0);
+    c.baseStr = (uint16_t)gd_num(base, "str", 0);
+    c.baseEnd = (uint16_t)gd_num(base, "end", 0);
+    c.baseAgi = (uint16_t)gd_num(base, "agi", 0);
+    c.baseInt = (uint16_t)gd_num(base, "int", 0);
 
     cJSON* needs = cJSON_GetObjectItem(root, "needs");
-    c.hungerPerHr   = (float)jnum(needs, "hungerPerHr",   0);
-    c.happyPerHr    = (float)jnum(needs, "happyPerHr",    0);
-    c.poopIntervalS = (float)jnum(needs, "poopIntervalS", 1e9);
-    c.sleepStart    = (uint8_t)jnum(needs, "sleepStart", 0);
-    c.sleepEnd      = (uint8_t)jnum(needs, "sleepEnd",   0);
+    c.hungerPerHr   = (float)gd_num(needs, "hungerPerHr",   0);
+    c.happyPerHr    = (float)gd_num(needs, "happyPerHr",    0);
+    c.poopIntervalS = (float)gd_num(needs, "poopIntervalS", 1e9);
+    c.sleepStart    = (uint8_t)gd_num(needs, "sleepStart", 0);
+    c.sleepEnd      = (uint8_t)gd_num(needs, "sleepEnd",   0);
 
-    c.minStageSecs = (float)jnum(root, "minStageSecs", 1e9);
-    jstr(root, "sprite", c.spriteFile, sizeof c.spriteFile, "sprite.png");
+    c.minStageSecs = (float)gd_num(root, "minStageSecs", 1e9);
+    gd_str(root, "sprite", c.spriteFile, sizeof c.spriteFile, "sprite.png");
 
     c.evoCount = 0;
     cJSON* evos = cJSON_GetObjectItem(root, "evolutions");
@@ -178,16 +164,16 @@ bool CreatureRegistry::parseFile(const char* path, Creature& c)
             if (c.evoCount >= (uint8_t)(sizeof(c.evos) / sizeof(c.evos[0]))) break;
             EvoEdge& e = c.evos[c.evoCount];
             memset(&e, 0, sizeof e);
-            jstr(ev, "to", e.to, sizeof e.to, "");
+            gd_str(ev, "to", e.to, sizeof e.to, "");
             e.toIdx = -1;
-            e.minHp         = (uint32_t)jnum(ev, "minHp", 0);
-            e.minStr        = (uint16_t)jnum(ev, "minStr", 0);
-            e.minEnd        = (uint16_t)jnum(ev, "minEnd", 0);
-            e.minAgi        = (uint16_t)jnum(ev, "minAgi", 0);
-            e.minInt        = (uint16_t)jnum(ev, "minInt", 0);
-            e.minFriendship = (uint16_t)jnum(ev, "minFriendship", 0);
-            e.minWins       = (uint32_t)jnum(ev, "minWins", 0);
-            e.maxCareMistakes = (uint8_t)jnum(ev, "maxCareMistakes", 255);
+            e.minHp         = (uint32_t)gd_num(ev, "minHp", 0);
+            e.minStr        = (uint16_t)gd_num(ev, "minStr", 0);
+            e.minEnd        = (uint16_t)gd_num(ev, "minEnd", 0);
+            e.minAgi        = (uint16_t)gd_num(ev, "minAgi", 0);
+            e.minInt        = (uint16_t)gd_num(ev, "minInt", 0);
+            e.minFriendship = (uint16_t)gd_num(ev, "minFriendship", 0);
+            e.minWins       = (uint32_t)gd_num(ev, "minWins", 0);
+            e.maxCareMistakes = (uint8_t)gd_num(ev, "maxCareMistakes", 255);
             if (e.to[0]) c.evoCount++;
         }
     }

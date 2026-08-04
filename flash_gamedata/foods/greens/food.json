@@ -1,0 +1,18 @@
+{
+  "id": "greens",
+  "name": "Fresh Greens",
+  "desc": "Crisp, wholesome leaves.",
+  "tags": ["plant", "healthy"],
+
+  "fills": 20,
+  "happiness": 2,
+  "health": 6,
+  "color": "#4caf50",
+
+  "drift": {
+    "wild": -0.5
+  },
+
+  "cost": 15,
+  "rarity": "common"
+}

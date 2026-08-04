@@ -1,11 +1,73 @@
 #pragma once
 #include <cstdint>
+#include "personality.hpp"   // DriftAxis/AX_COUNT + PersonalityTracker (drift sink)
 
 class SaveStore;          // defined in save.hpp
 class CreatureRegistry;   // defined in creatures.hpp
 struct Creature;          // defined in creatures.hpp
+struct Food;              // defined in foods.hpp
 
 constexpr int PET_NICK_MAX = 16;   // max player-chosen nickname length
+
+// --- Bond scale -------------------------------------------------------------------
+// The bond is the long-haul relationship the conversation system pays off, so it is
+// deliberately slow: reaching the top tier should take weeks of returning to the
+// creature, not an evening of grinding. Two things make that true -- a wide scale (so
+// there is resolution for small daily gains and room for many milestone tiers), and a
+// DAILY CAP on repeatable sources (below), because a wide scale on its own just turns
+// farming into *more* farming.
+constexpr uint16_t FRIENDSHIP_MAX = 10000;
+
+// Where a bond gain came from. Routine acts (feeding, petting, poking, minigames) are
+// spammable, so they share a small daily allowance; milestones (battle wins, evolution,
+// story conversations) are rare by nature and bypass it.
+enum BondSource : uint8_t {
+    BOND_ROUTINE = 0,
+    BOND_MILESTONE,
+};
+
+// How the creature currently feels about the player. A conversation choice can genuinely upset
+// it, and that has teeth in the care loop: while upset it REFUSES to be petted or poked. Food
+// still works, though -- it won't be touched but it will accept a gift, which is what keeps the
+// rift mendable rather than a lockout. A follow-up conversation is the real repair.
+//
+// Owned by Pet (it's the creature's state, and the care loop must see it) but kept OUT of the
+// versioned blob, in its own NVS key, so adding it wipes nobody's pet. Per-creature: a new egg
+// starts on good terms.
+enum PetMood : uint8_t {
+    MOOD_OK = 0,
+    MOOD_HURT,       // saddened
+    MOOD_ANGRY,      // angered -- takes more mending
+};
+
+// How the player played with the creature. Both raise happiness, but they say opposite
+// things about the creature being raised (cuddling breeds an attached, timid temperament;
+// rough play an energetic, unruly one), which is what makes "keep it happy" a parenting
+// style rather than one optimal action.
+enum PlayKind : uint8_t {
+    PLAY_AFFECTION = 0,   // sustained petting
+    PLAY_ROUGH,           // poking
+};
+
+// The reverse of Pet::moodId(): parse a data-driven mood string ("ok"/"hurt"/"angry").
+// Returns false on an unknown token -- callers must treat that as a no-op, never as "ok".
+bool mood_from_id(const char* s, PetMood* out);
+
+// --- Coarse care readout ----------------------------------------------------------
+// Hunger and happiness are shown as named states rather than numbers on purpose: a
+// precise gauge is an optimization target, and every player filling it the same way
+// flattens personality drift (docs/conversations-and-personality.md 2.8). HP and Energy
+// stay exact -- those are explicit game resources where precision is fairness.
+// (The matching tier->colour mapping is care_tier_color() in ui/widgets.hpp -- kept
+// out of here so the sim layer doesn't depend on the renderer's palette.)
+int         care_tier(float v);          // 0..4 (0 = worst)
+const char* hunger_label(float v);       // "Starving".."Full"
+const char* mood_label(float v);         // "Miserable".."Delighted"
+
+// Tier at/below which the creature needs attention. THE shared threshold: SceneHome's
+// pulsing "!" badge and the conversation context's "hungry" gate must agree, or modded
+// conversations fire about a creature that shows no cue on screen (or vice versa).
+constexpr int CARE_TIER_NEEDY = 1;
 
 // Digimon-style life stages. Egg hatches into In-Training I, then progresses up
 // the ladder. Mega+ is a special terminal form (conditions TBD once stats exist).
@@ -55,7 +117,7 @@ struct PetState {
     // --- RPG stats: TRAINED MODIFIERS only (minigames/items). Effective stat =
     //     creature's innate base + this modifier. Modifiers reset to 0 on evolve. ---
     uint32_t statMod[STAT_COUNT];  // indexed by StatId (MAXHP wide; others clamp small)
-    uint16_t friendship;    // 0..1000 bond meter (Stranger..Soulbound); PERSISTS across evolution
+    uint16_t friendship;    // 0..FRIENDSHIP_MAX bond (Stranger..Soulbound); PERSISTS across evolution
     uint32_t wins;          // battle wins; PERSISTS across evolution (gates evos via EvoEdge.minWins)
     uint32_t losses;        // battle losses; PERSISTS across evolution
     float    energy;        // 0..100 training stamina; gates stat training, regenerates over time
@@ -79,6 +141,18 @@ class Pet {
     int       idx_ = -1;          // resolved registry index of the current creature
     char      nickname_[PET_NICK_MAX + 1] = {0};   // player-set name (empty = use species name)
     bool      refused_ = false;   // set when an action is refused; UI consumes it for a "no" wiggle
+    // Daily bond allowance (see BondSource). Kept OUT of PetState -- and so out of the
+    // versioned blob -- in its own NVS keys, flushed by markSaved(). The window is a
+    // rolling 24h anchored at the last refill (see addFriendship for why not a day index).
+    uint32_t  bondWinT_ = 0;      // RTC second the current allowance window began
+    uint32_t  bondToday_ = 0;     // routine bond points already granted this window
+    PersonalityTracker* drift_ = nullptr;   // optional: personality drift sink (set by App)
+    float     idleSecs_ = 0.0f;   // REAL seconds since the last deliberate interaction (persisted)
+    bool      catchingUp_ = false;   // inside boot()'s offline replay (attenuates idle drift)
+    int       cuIdleNudges_ = 0;     // idle nudges already granted during this catch-up
+    bool      startedFresh_ = false;   // boot() hatched a new egg (no save was loaded)
+    uint8_t   mood_ = MOOD_OK;         // PetMood; out-of-blob, per-creature
+    uint8_t   mend_ = 0;               // care shown since being upset (softens a step when full)
 
     void newEgg();
     int  pickEvolution() const;   // first eligible evolution edge (creature idx), or -1
@@ -88,20 +162,51 @@ class Pet {
 public:
     Pet(SaveStore& save, CreatureRegistry& reg) : save_(save), reg_(reg) {}
 
+    // Personality drift. The pet is the funnel every notable action already passes through,
+    // so it is where drift is emitted from; the tracker itself is optional (null = the
+    // feature is simply off). Minigames call nudgeDrift() directly with their own vector,
+    // the same way each already owns its stat-gain table.
+    void setDriftSink(PersonalityTracker* d) { drift_ = d; }
+    void nudgeDrift(const float d[AX_COUNT], float strength = 1.0f);
+
+    // Apply one conversation choice. One-shot story conversations are MILESTONE bonding --
+    // talking is the payoff the bond exists for. REPEATABLE conversations pass BOND_ROUTINE
+    // instead, so replaying small talk shares the daily allowance rather than bypassing it.
+    // Drift nudges are the most deliberate in the game (the player is answering in words),
+    // so they land at full strength either way.
+    void applyConversationChoice(int friendshipDelta, int happinessDelta,
+                                 const float drift[AX_COUNT], BondSource src = BOND_MILESTONE);
+
+    // --- mood (see PetMood) ---
+    PetMood     mood() const { return (PetMood)mood_; }
+    bool        isUpset() const { return mood_ != MOOD_OK; }
+    const char* moodId() const;              // "ok" / "hurt" / "angry", for conversation gates
+    void        setMood(PetMood m);          // RAM only; the caller's markSaved persists it
+    void        mendMood(int amount);        // care progress; softens a step when it fills
+
     void boot();                  // seed RTC, load save + offline catch-up, else new egg
     void tick(float dt);          // advance sim by dt SIM-seconds (caller applies gameSpeed)
-    void feed();
+    // Feed a specific food. Which food is chosen is the player's main day-to-day way of
+    // shaping the creature's temperament, so this is the hook the personality system
+    // reads (see docs/food-and-feeding.md). Refuses (and arms the "no" wiggle) when the
+    // creature can't eat.
+    void feed(const Food& f);
+    bool canEat();                // false + arms the refusal wiggle when egg/asleep/sick
     void clean();
     void heal();
     void toggleLights();
-    void play(float amount);      // raise happiness (petting); not saved per-call
+    // Raise happiness; not saved per-call. Returns false when the touch was REFUSED
+    // (egg/sick/asleep/upset) so the caller withholds friendship and reward FX too.
+    bool play(float amount, PlayKind kind);
     void markSaved();             // stamp lastUpdate = now and persist
     void setGameSpeed(uint16_t mult);
     bool checkRefused();          // true once if an action was just refused
 
     // --- stats / friendship (flat growth; callers persist via markSaved) ---
     void     trainStat(StatId id, uint32_t amount);  // add to the trained modifier (clamped so base+mod<=cap)
-    void     addFriendship(int delta);               // clamp to 0..1000
+    // Routine gains are metered by a daily allowance (see BondSource); milestones aren't.
+    // Losses always apply in full regardless of source.
+    void     addFriendship(int delta, BondSource src = BOND_ROUTINE);
     uint32_t stat(StatId id) const;                  // EFFECTIVE stat = base + modifier (clamped)
     uint32_t baseStat(StatId id) const;              // innate base from the current creature
     uint32_t modifier(StatId id) const;              // trained bonus on top of the base
@@ -122,12 +227,17 @@ public:
     // is too undeveloped to train or fight. Gates the menu's Activities + Battle entries.
     bool     activitiesUnlocked() const { return s_.stage >= STAGE_IN_TRAINING_2; }
 
+    // True when boot() hatched a fresh egg rather than loading a save. Lets the composition
+    // root clear per-creature state (conversation history/journal) that Pet itself shouldn't
+    // know about.
+    bool     startedFresh() const { return startedFresh_; }
+
     // --- DEV/CHEAT helpers (used only by the debug Cheats screen; bypass normal gating and
     //     persist immediately). Kept as explicit named ops rather than exposing raw state. ---
     void cheatRestore();                        // full HP/energy/hunger/happiness, cure sick, clear poop
     void cheatSetHealth(float pct);             // 0..100
     void cheatSetEnergy(float pct);             // 0..100 (stamina)
-    void cheatSetFriendship(int value);         // 0..1000
+    void cheatSetFriendship(int value);         // 0..FRIENDSHIP_MAX
     void cheatAdjustStat(StatId id, int delta); // nudge the trained modifier (clamped to 0..room)
     void cheatMaxStat(StatId id);               // set the modifier so the effective stat hits its cap
     void cheatSetSpecies(int creatureIdx);      // morph to any registry creature (keeps trained stats)

@@ -3,9 +3,14 @@
 #include "engine/power.hpp"
 #include "sim/save.hpp"
 #include "sim/creatures.hpp"
+#include "sim/foods.hpp"
+#include "sim/personality.hpp"
+#include "sim/conversation.hpp"
 #include "sim/pet.hpp"
 #include "scene.hpp"
 #include "scenes/care/scene_home.hpp"
+#include "scenes/care/scene_feed.hpp"
+#include "scenes/care/scene_conversation.hpp"
 #include "scenes/minigames/scene_run.hpp"
 #include "scenes/minigames/scene_mindmaze.hpp"
 #include "scenes/minigames/scene_smash.hpp"
@@ -19,9 +24,10 @@
 #include "scenes/menus/scene_cheats.hpp"
 #include "scenes/menus/scene_timeset.hpp"
 #include "scenes/menus/scene_stats.hpp"
+#include "scenes/menus/scene_journal.hpp"
 #include "scenes/menus/scene_rename.hpp"
 
-enum class SceneId { Home, Menu, Activities, Run, MindMaze, Smash, Bulwark, Stance, Battle, BattleSelect, Settings, Cheats, TimeSet, Stats, Rename };
+enum class SceneId { Home, Feed, Conversation, Menu, Activities, Run, MindMaze, Smash, Bulwark, Stance, Battle, BattleSelect, Settings, Cheats, TimeSet, Stats, Journal, Rename };
 
 // Scene-change animation. Forward = going deeper (new covers, slides in from the
 // right with overshoot); Back = returning (old slides off, revealing new);
@@ -35,11 +41,17 @@ public:
     SaveStore        save;
     InputManager     input;
     CreatureRegistry creatures;          // data-driven roster (flash + SD), loaded in init()
+    FoodRegistry     foods;              // data-driven food list (gamedata + SD), loaded in init()
+    PersonalityRegistry personalities;   // data-driven natures + traits (gamedata + SD)
+    PersonalityTracker  drift{save, personalities};   // emergent identity; fed by Pet's actions
+    ConversationSystem  conversations;    // moddable dialogue: streaming selection, O(1) RAM
     Pet              pet{save, creatures};
     bool             debugOverlay = false;   // on-screen debug info (persisted via save)
 
     SceneManager  scenes;
     SceneHome     home;
+    SceneFeed     feedScene;             // food picker (named to avoid reading like pet.feed)
+    SceneConversation conversationScene;
     SceneMenu     menu;
     SceneActivities activities;
     SceneRun      run;
@@ -53,6 +65,7 @@ public:
     SceneCheats   cheats;
     SceneTimeSet  timeset;
     SceneStats    stats;
+    SceneJournal  journal;
     SceneRename   rename;
 
     void init();               // bind scenes, boot pet, load flags, enter Home

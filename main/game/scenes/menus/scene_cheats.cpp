@@ -1,7 +1,7 @@
 #include "scene_cheats.hpp"
 #include "core/app.hpp"
 #include "engine/gfx.hpp"
-#include "engine/widgets.hpp"
+#include "ui/widgets.hpp"
 #include "sim/creatures.hpp"
 #include <cstring>
 #include <cstdio>    // snprintf (species label)
