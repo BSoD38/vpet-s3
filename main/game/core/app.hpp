@@ -21,13 +21,14 @@
 #include "scenes/menus/scene_activities.hpp"
 #include "scenes/menus/scene_menu.hpp"
 #include "scenes/menus/scene_settings.hpp"
+#include "scenes/menus/scene_update.hpp"
 #include "scenes/menus/scene_cheats.hpp"
 #include "scenes/menus/scene_timeset.hpp"
 #include "scenes/menus/scene_stats.hpp"
 #include "scenes/menus/scene_journal.hpp"
 #include "scenes/menus/scene_rename.hpp"
 
-enum class SceneId { Home, Feed, Conversation, Menu, Activities, Run, MindMaze, Smash, Bulwark, Stance, Battle, BattleSelect, Settings, Cheats, TimeSet, Stats, Journal, Rename };
+enum class SceneId { Home, Feed, Conversation, Menu, Activities, Run, MindMaze, Smash, Bulwark, Stance, Battle, BattleSelect, Settings, Update, Cheats, TimeSet, Stats, Journal, Rename };
 
 // Scene-change animation. Forward = going deeper (new covers, slides in from the
 // right with overshoot); Back = returning (old slides off, revealing new);
@@ -62,6 +63,7 @@ public:
     SceneBattle   battle;
     SceneBattleSelect battleSelect;
     SceneSettings settings;
+    SceneUpdate   updateScene;           // SD-card firmware install (named to avoid Scene::update)
     SceneCheats   cheats;
     SceneTimeSet  timeset;
     SceneStats    stats;

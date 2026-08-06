@@ -78,11 +78,13 @@ int gfx_text_wrap_lines(int w, uint8_t size, const char* s, int maxLines = 0);
 int gfx_text_wrap_height(int w, uint8_t size, const char* s, int lineGap = 2, int maxLines = 0);
 void gfx_bar(int x, int y, int w, int h, float frac,    // stat bar (0..1)
              uint16_t fg, uint16_t bg, uint16_t border);
+// `mirror` flips the sprite left-to-right (creature facing, and poses like the DMC
+// refusal head-shake that animate by alternating flipped/unflipped).
 void gfx_blit(const Sprite& s, int cx, int cy);         // draw sprite centered at (cx,cy)
-void gfx_blit_sprite(LGFX_Sprite* s, int cx, int cy, uint16_t transp);           // PSRAM sprite, centered
-void gfx_blit_sprite_bottom(LGFX_Sprite* s, int cx, int bottomY, uint16_t transp);  // anchored by its feet (bottom-center)
-void gfx_blit_sprite_fit(LGFX_Sprite* s, int cx, int cy, int maxW, int maxH, uint16_t transp);  // scaled to fit a box, centered
-void gfx_blit_sprite_fit_bottom(LGFX_Sprite* s, int cx, int bottomY, int maxW, int maxH, uint16_t transp);  // feet-anchored + scaled DOWN to fit
+void gfx_blit_sprite(LGFX_Sprite* s, int cx, int cy, uint16_t transp, bool mirror = false);           // PSRAM sprite, centered
+void gfx_blit_sprite_bottom(LGFX_Sprite* s, int cx, int bottomY, uint16_t transp, bool mirror = false);  // anchored by its feet (bottom-center)
+void gfx_blit_sprite_fit(LGFX_Sprite* s, int cx, int cy, int maxW, int maxH, uint16_t transp, bool mirror = false);  // scaled to fit a box, centered
+void gfx_blit_sprite_fit_bottom(LGFX_Sprite* s, int cx, int bottomY, int maxW, int maxH, uint16_t transp, bool mirror = false);  // feet-anchored + scaled DOWN to fit
 void gfx_invalidate_scaled(const void* src);           // drop cached scaled copies of src; call BEFORE freeing src
 void gfx_tile_region(int x, int y, int w, int h, const uint16_t* tile,   // fill a rect by repeating an opaque
                      int tw, int th, int scrollX = 0);                   // tile; scrollX shifts it left (scrolling ground)

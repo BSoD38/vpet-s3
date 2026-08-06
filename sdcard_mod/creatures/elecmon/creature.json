@@ -1,0 +1,37 @@
+{
+  "name": "Elecmon",
+  "tier": 3,
+  "attribute": "data",
+  "base": {
+    "hp": 95,
+    "str": 10,
+    "end": 9,
+    "agi": 12,
+    "int": 9
+  },
+  "needs": {
+    "hungerPerHr": 12,
+    "happyPerHr": 12,
+    "poopIntervalS": 9000,
+    "sleepStart": 20,
+    "sleepEnd": 7
+  },
+  "minStageSecs": 172800,
+  "sprite": "sheet.png",
+  "frames": 16,
+  "evolutions": [
+    {
+      "to": "kabuterimon",
+      "maxCareMistakes": 3,
+      "minStr": 60
+    },
+    {
+      "to": "birdramon",
+      "minAgi": 40
+    },
+    {
+      "to": "whamon"
+    }
+  ],
+  "id": "elecmon"
+}

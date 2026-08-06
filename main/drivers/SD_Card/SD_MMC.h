@@ -1,6 +1,7 @@
 
 #pragma once
 
+#include <stdbool.h>
 #include <string.h>
 #include <sys/unistd.h>
 #include <sys/stat.h>
@@ -32,6 +33,8 @@ esp_err_t s_example_read_file(const char *path);
 extern uint32_t SDCard_Size;
 extern uint32_t Flash_Size;
 void SD_Init(void);
+sdmmc_card_t *SD_GetCard(void);   // card mounted at boot, or NULL (for engine/sdwatch)
+bool SD_Probe_Insertion(void);    // card answering on the bus? (no mount/format)
 void Flash_Searching(void);
 FILE* Open_File(const char *file_path);
 uint16_t Folder_retrieval(const char* directory, const char* fileExtension, char File_Name[][100],uint16_t maxFiles);

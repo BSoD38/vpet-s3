@@ -9,7 +9,21 @@ CONFIG_FATFS_LFN_STACK=y
 CONFIG_FATFS_MAX_LFN=255
 CONFIG_FATFS_API_ENCODING_ANSI_OEM=y
 # Two FAT volumes mounted at once: SD card (/sdcard) + flash creatures partition (/creatures)
-CONFIG_FATFS_VOLUME_COUNT=2
+# Three FAT volumes are mounted simultaneously whenever an SD card is present: the card itself,
+# the `creatures` partition, and `gamedata`. At the default of 2 the third mount fails with
+# ESP_ERR_NO_MEM, and because every registry degrades gracefully to its built-in fallback the
+# symptom is silent: inserting an SD card would wipe out foods, natures, personalities AND
+# conversations while the game carried on as if nothing were wrong. 4 leaves room for one more
+# asset partition; unused slots cost nothing (the allocation is per MOUNTED volume).
+CONFIG_FATFS_VOLUME_COUNT=4
+
+# Every mounted mod pack (engine/pakfs) registers its own VFS root on top of the console
+# devices, /dev/null, /sdcard and /gamedata -- at the default of 8 the FIRST SD mod pack
+# already fails to register (ESP_ERR_NO_MEM at boot, base.pak having taken the last slot)
+# and its content silently never loads. Same trap as FATFS_VOLUME_COUNT above, one layer
+# down. Worst case today is 11 (3 console + null + 2 mounts + 5 paks); 16 leaves headroom
+# and unused slots cost one pointer each.
+CONFIG_VFS_MAX_COUNT=16
 
 CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
 CONFIG_PARTITION_TABLE_CUSTOM=y

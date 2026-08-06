@@ -1,0 +1,41 @@
+{
+  "name": "Gabumon",
+  "tier": 3,
+  "attribute": "vaccine",
+  "base": {
+    "hp": 100,
+    "str": 11,
+    "end": 10,
+    "agi": 10,
+    "int": 9
+  },
+  "needs": {
+    "hungerPerHr": 12,
+    "happyPerHr": 13,
+    "poopIntervalS": 9000,
+    "sleepStart": 21,
+    "sleepEnd": 6
+  },
+  "minStageSecs": 172800,
+  "sprite": "sheet.png",
+  "frames": 16,
+  "evolutions": [
+    {
+      "to": "angemon",
+      "maxCareMistakes": 2,
+      "minStr": 120
+    },
+    {
+      "to": "birdramon",
+      "minAgi": 60
+    },
+    {
+      "to": "kabuterimon",
+      "minStr": 25
+    },
+    {
+      "to": "whamon"
+    }
+  ],
+  "id": "gabumon"
+}

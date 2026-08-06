@@ -2,6 +2,7 @@
 #include "gamedata.hpp"
 #include "save.hpp"
 #include "engine/clock.hpp"      // clock_now (journal timestamps)
+#include "engine/pakfs.hpp"      // mounted mod packs are extra scan roots
 #include "pet.hpp"               // FRIENDSHIP_MAX (bond-scaled talk frequency)
 #include "esp_heap_caps.h"       // PSRAM allocation for the active conversation
 #include "esp_log.h"
@@ -577,23 +578,31 @@ void ConversationSystem::beginScan()
 // whole library has been covered.
 bool ConversationSystem::openNextDir()
 {
+    // Roots per pool: 0 = flash, 1..pakfs_count() = mounted mod packs, last = loose SD.
+    const int nRoots = 2 + pakfs_count();
     while (scanPool_ < POOL_COUNT) {
+        const bool inPak  = scanRoot_ > 0 && scanRoot_ < nRoots - 1;
+        const char* pakRt = inPak ? pakfs_root(scanRoot_ - 1) : nullptr;
+
         // Species conversations ride along in the creature's own folder rather than a pool
         // directory, so they need the creature id rather than a fixed name.
         if (scanPool_ == POOL_SPECIES) {
             if (!species_[0]) { scanPool_++; scanRoot_ = 0; continue; }
             if (scanRoot_ == 0)
                 snprintf(dirPath_, sizeof dirPath_, "/creatures/%s/conversations", species_);
+            else if (inPak)
+                snprintf(dirPath_, sizeof dirPath_, "%s/creatures/%s/conversations", pakRt, species_);
             else
                 snprintf(dirPath_, sizeof dirPath_, "/sdcard/creatures/%s/conversations", species_);
         } else {
             const char* pd = POOL_DIR[scanPool_];
             if (scanRoot_ == 0) snprintf(dirPath_, sizeof dirPath_, "%s/conversations/%s", GAMEDATA_ROOT, pd);
+            else if (inPak)     snprintf(dirPath_, sizeof dirPath_, "%s/conversations/%s", pakRt, pd);
             else                snprintf(dirPath_, sizeof dirPath_, "/sdcard/conversations/%s", pd);
         }
 
         curPool_ = (uint8_t)scanPool_;                        // remember BEFORE the cursor moves
-        if (++scanRoot_ > 1) { scanRoot_ = 0; scanPool_++; }
+        if (++scanRoot_ >= nRoots) { scanRoot_ = 0; scanPool_++; }
 
         DIR* d = opendir(dirPath_);
         if (d) { dir_ = d; return true; }

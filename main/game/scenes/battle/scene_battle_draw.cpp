@@ -44,8 +44,19 @@ void SceneBattle::drawCombatant(int side)
     int cx = baseX + (int)shakeX_;
     int cy = baseY + (int)(dir * loff + kb + bob + sink) + (int)shakeY_;
 
-    LGFX_Sprite* spr = app().creatures.sprite(c.spriteIdx);
-    if (spr) gfx_blit_sprite_fit(spr, cx, cy, SPRITE_BOX, SPRITE_BOX, SPRITE_TRANSP);
+    // Pose: KO'd -> Lose; mid-lunge -> wind-up/strike attack frames; just hit -> Angry;
+    // foe down -> victory Happy; otherwise idle flip (offset per side so they alternate).
+    const Combatant& foe = battle_.side(1 - side);
+    int f;
+    if (c.hp <= 0 || faint_[side] > 0.0f) f = FRM_LOSE;
+    else if (lunge_[side] > 0.0f)         f = (lunge_[side] > LUNGE_DUR * 0.5f) ? FRM_ATK1 : FRM_ATK2;
+    else if (flash_[side] > 0.0f)         f = FRM_ANGRY;
+    else if (foe.hp <= 0)                 f = FRM_HAPPY;
+    else                                  f = fmodf(t_ + side * 0.7f, 1.4f) < 0.7f ? FRM_IDLE1 : FRM_IDLE2;
+
+    // DMC sprites face left; mirror the player's side so the combatants face each other.
+    LGFX_Sprite* spr = app().creatures.frame(c.spriteIdx, f);
+    if (spr) gfx_blit_sprite_fit(spr, cx, cy, SPRITE_BOX, SPRITE_BOX, SPRITE_TRANSP, side == 0);
     else { fb.fillRoundRect(cx - 24, cy - 24, 48, 48, 8, col::dim); gfx_text(cx - 6, cy - 8, 2, col::black, "?"); }
 
     if (fi > 0.0f) {

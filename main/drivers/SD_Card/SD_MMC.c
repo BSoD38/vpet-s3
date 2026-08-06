@@ -8,6 +8,11 @@ static const char *SD_TAG = "SD";
 uint32_t Flash_Size = 0;
 uint32_t SDCard_Size = 0;
 
+// Handle of the card mounted at boot (NULL when no card was present). Exposed so the
+// runtime presence watcher (engine/sdwatch) can health-check it.
+static sdmmc_card_t *s_card = NULL;
+sdmmc_card_t *SD_GetCard(void) { return s_card; }
+
 
 esp_err_t s_example_write_file(const char *path, char *data)
 {
@@ -54,8 +59,11 @@ void SD_Init(void)
     // Options for mounting the filesystem.
     // If format_if_mount_failed is set to true, SD card will be partitioned and formatted in case when mounting fails.  false true
     esp_vfs_fat_sdmmc_mount_config_t mount_config = {
-        .format_if_mount_failed = true,           
-        .max_files = 5,
+        .format_if_mount_failed = true,
+        // Each mounted mod pack (game/engine/pakfs) holds ONE of these slots open for the
+        // whole session (up to 4), on top of the conversation scan's cross-frame dir handle
+        // and transient sprite/config reads -- 5 was sized before packs existed.
+        .max_files = 10,
         .allocation_unit_size = 16 * 1024
     };
     sdmmc_card_t *card;
@@ -108,6 +116,36 @@ void SD_Init(void)
     // Card has been initialized, print its properties
     sdmmc_card_print_info(stdout, card);
     SDCard_Size = ((uint64_t) card->csd.capacity) * card->csd.sector_size / (1024 * 1024);
+    s_card = card;
+}
+
+// Probe-only "is a card answering on the bus?" for mid-session INSERTION detection.
+// No mount and no format (unlike SD_Init), so it is safe to call repeatedly. Only for
+// use while nothing is mounted: after a failed SD_Init the convenience mount has cleaned
+// the host up again, so the first probe brings host+slot up once and keeps them.
+bool SD_Probe_Insertion(void)
+{
+    static bool hostReady = false;
+    static sdmmc_card_t probe;
+
+    if (!hostReady) {
+        esp_err_t err = sdmmc_host_init();
+        if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) return false;
+        sdmmc_slot_config_t slot_config = SDMMC_SLOT_CONFIG_DEFAULT();
+        slot_config.width = 1;
+        slot_config.clk = CONFIG_EXAMPLE_PIN_CLK;
+        slot_config.cmd = CONFIG_EXAMPLE_PIN_CMD;
+        slot_config.d0  = CONFIG_EXAMPLE_PIN_D0;
+        slot_config.d1  = CONFIG_EXAMPLE_PIN_D1;
+        slot_config.d2  = CONFIG_EXAMPLE_PIN_D2;
+        slot_config.d3  = CONFIG_EXAMPLE_PIN_D3;
+        slot_config.flags |= SDMMC_SLOT_FLAG_INTERNAL_PULLUP;
+        if (sdmmc_host_init_slot(SDMMC_HOST_SLOT_1, &slot_config) != ESP_OK) return false;
+        hostReady = true;
+    }
+
+    sdmmc_host_t host = SDMMC_HOST_DEFAULT();
+    return sdmmc_card_init(&host, &probe) == ESP_OK;
 }
 void Flash_Searching(void)
 {

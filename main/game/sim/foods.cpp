@@ -1,6 +1,7 @@
 #include "foods.hpp"
 #include "gamedata.hpp"
 #include "engine/gfx.hpp"        // rgb565, col
+#include "engine/pakfs.hpp"      // mounted mod packs are extra scan roots
 #include "esp_log.h"
 #include "cJSON.h"
 #include <dirent.h>
@@ -196,7 +197,13 @@ void FoodRegistry::loadAll()
 
     scanPack(flashRoot, "flash");                  // base game: pack first, then per-dir
     scanRoot(flashRoot, "flash");
-    scanPack(SD_ROOT,   "sd");                     // mods overlay (override on id clash)
+    for (int i = 0; i < pakfs_count(); i++) {      // mod packs (later pak wins)
+        char root[32];
+        snprintf(root, sizeof root, "%s/foods", pakfs_root(i));
+        scanPack(root, "pak");
+        scanRoot(root, "pak");
+    }
+    scanPack(SD_ROOT,   "sd");                     // loose-file mods: the final overlay
     scanRoot(SD_ROOT,   "sd");
 
     if (count_ == 0) { addBuiltinFood(); return; } // feeding must never be impossible

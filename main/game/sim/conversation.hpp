@@ -192,7 +192,7 @@ private:
     // streaming scan state
     bool     scanning_   = false;
     int      scanPool_   = 0;
-    int      scanRoot_   = 0;      // 0 = flash, 1 = SD
+    int      scanRoot_   = 0;      // 0 = flash, 1..pakfs_count() = mod packs, last = SD
     uint8_t  curPool_    = 0;      // pool the OPEN directory belongs to (scanPool_ has moved on)
     char     species_[24]{};       // current creature id, for its own conversation folder
     void*    dir_        = nullptr;

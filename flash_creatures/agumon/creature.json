@@ -1,0 +1,45 @@
+{
+  "name": "Agumon",
+  "tier": 3,
+  "attribute": "vaccine",
+  "base": {
+    "hp": 100,
+    "str": 12,
+    "end": 9,
+    "agi": 10,
+    "int": 8
+  },
+  "needs": {
+    "hungerPerHr": 12,
+    "happyPerHr": 13,
+    "poopIntervalS": 9000,
+    "sleepStart": 21,
+    "sleepEnd": 6
+  },
+  "minStageSecs": 172800,
+  "sprite": "sheet.png",
+  "frames": 16,
+  "evolutions": [
+    {
+      "to": "greymon",
+      "maxCareMistakes": 3,
+      "minStr": 120
+    },
+    {
+      "to": "devimon",
+      "maxCareMistakes": 3
+    },
+    {
+      "to": "meramon",
+      "minStr": 60
+    },
+    {
+      "to": "tyranomon",
+      "minStr": 25
+    },
+    {
+      "to": "numemon"
+    }
+  ],
+  "id": "agumon"
+}

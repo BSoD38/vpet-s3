@@ -1,0 +1,29 @@
+{
+  "name": "Devimon",
+  "tier": 4,
+  "attribute": "virus",
+  "base": {
+    "hp": 230,
+    "str": 24,
+    "end": 16,
+    "agi": 26,
+    "int": 24
+  },
+  "needs": {
+    "hungerPerHr": 13,
+    "happyPerHr": 11,
+    "poopIntervalS": 10800,
+    "sleepStart": 1,
+    "sleepEnd": 9
+  },
+  "minStageSecs": 259200,
+  "sprite": "sheet.png",
+  "frames": 16,
+  "evolutions": [
+    {
+      "to": "metalgreymon",
+      "minWins": 15
+    }
+  ],
+  "id": "devimon"
+}

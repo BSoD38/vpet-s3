@@ -1,0 +1,29 @@
+{
+  "name": "MetalGreymon",
+  "tier": 5,
+  "attribute": "virus",
+  "base": {
+    "hp": 520,
+    "str": 55,
+    "end": 42,
+    "agi": 30,
+    "int": 32
+  },
+  "needs": {
+    "hungerPerHr": 15,
+    "happyPerHr": 12,
+    "poopIntervalS": 10800,
+    "sleepStart": 22,
+    "sleepEnd": 6
+  },
+  "minStageSecs": 345600,
+  "sprite": "sheet.png",
+  "frames": 16,
+  "evolutions": [
+    {
+      "to": "blitzgreymon",
+      "minWins": 40
+    }
+  ],
+  "id": "metalgreymon"
+}

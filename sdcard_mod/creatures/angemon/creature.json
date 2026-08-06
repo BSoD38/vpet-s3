@@ -1,0 +1,29 @@
+{
+  "name": "Angemon",
+  "tier": 4,
+  "attribute": "vaccine",
+  "base": {
+    "hp": 245,
+    "str": 28,
+    "end": 22,
+    "agi": 22,
+    "int": 30
+  },
+  "needs": {
+    "hungerPerHr": 13,
+    "happyPerHr": 13,
+    "poopIntervalS": 10800,
+    "sleepStart": 21,
+    "sleepEnd": 6
+  },
+  "minStageSecs": 259200,
+  "sprite": "sheet.png",
+  "frames": 16,
+  "evolutions": [
+    {
+      "to": "metalmamemon",
+      "minWins": 15
+    }
+  ],
+  "id": "angemon"
+}

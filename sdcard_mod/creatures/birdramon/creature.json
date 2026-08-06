@@ -1,0 +1,29 @@
+{
+  "name": "Birdramon",
+  "tier": 4,
+  "attribute": "data",
+  "base": {
+    "hp": 250,
+    "str": 27,
+    "end": 20,
+    "agi": 26,
+    "int": 18
+  },
+  "needs": {
+    "hungerPerHr": 14,
+    "happyPerHr": 12,
+    "poopIntervalS": 10800,
+    "sleepStart": 22,
+    "sleepEnd": 6
+  },
+  "minStageSecs": 259200,
+  "sprite": "sheet.png",
+  "frames": 16,
+  "evolutions": [
+    {
+      "to": "metalmamemon",
+      "minWins": 15
+    }
+  ],
+  "id": "birdramon"
+}

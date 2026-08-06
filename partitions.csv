@@ -8,13 +8,28 @@
 #
 # 128K here (was 24K) because the conversation system's bounded state scales with content: a
 # large modded library wants a much bigger seen-history ring than 256 entries, or old one-shot
-# conversations fall off the ring and start repeating. Flash is 16MB and this map ends ~6.5MB,
-# so the headroom is free.
+# conversations fall off the ring and start repeating. Flash is 16MB, so the headroom is free.
 nvs,        data, nvs,      0x9000,  0x20000,
-# App partitions must be 64K-aligned (MMU page mapping), so the first boundary clear of a
-# 128K nvs is 0x30000. The 0x29000..0x30000 remainder is unavoidable slack.
-factory,    app,  factory,  0x30000, 3M,
-creatures,  data, fat,      ,        1M,
-# Shared read-only game data (foods, natures, personalities, conversations). One partition for
-# all data-driven systems rather than one per feature -- see docs/food-and-feeding.md.
-gamedata,   data, fat,      ,        2M,
+# otadata: which app slot the bootloader boots (+ rollback state). Lives in what used to be
+# pure alignment slack before the first app slot, so it cost nothing to add.
+otadata,    data, ota,      0x29000, 0x2000,
+# Two equal app slots for updates (SD-card now, Wi-Fi OTA later): an update always streams
+# into the slot NOT currently running, then otadata flips the boot choice -- a failed/corrupt
+# write can never brick the running game. 4M each (app is ~1.2M, so ample headroom) because
+# slot sizes are effectively FOREVER: a partition-table change can't ship via an update, only
+# over USB. App partitions must be 64K-aligned (MMU page mapping), so the first boundary
+# clear of a 128K nvs + otadata is 0x30000. ota_0 keeps the old factory offset.
+ota_0,      app,  ota_0,    0x30000, 4M,
+ota_1,      app,  ota_1,    ,        4M,
+# All read-only base-game data: creatures, foods, natures, personalities, conversations. It
+# holds exactly ONE file -- base.pak -- built from flash_creatures/ + flash_gamedata/ by
+# tools/make_paks.py during the build. A pack keeps its table of contents in PSRAM, so the
+# whole data set costs one FAT open at boot instead of a directory walk per file (~7-12 ms
+# each on this hardware), and lazy sprite loads become a seek; see docs/modpacks.md.
+#
+# 3M = the 1M `creatures` + 2M `gamedata` partitions this replaced, so the map still ends at
+# exactly 0xB30000 and NOTHING moved -- nvs in particular stays at 0x9000, so no save data is
+# at risk from this change. Sized for growth: base.pak is ~171 KB with 23 creatures, and the
+# roster cap is 200 (~9 KB each packed).
+gamedata,   data, fat,      ,        3M,
+# Map ends 0xB30000 (~11.2M of 16M); ~4.8M still free for future asset partitions.

@@ -1,0 +1,32 @@
+{
+  "name": "Koromon",
+  "tier": 2,
+  "attribute": "free",
+  "base": {
+    "hp": 45,
+    "str": 5,
+    "end": 5,
+    "agi": 6,
+    "int": 5
+  },
+  "needs": {
+    "hungerPerHr": 10,
+    "happyPerHr": 12,
+    "poopIntervalS": 9000,
+    "sleepStart": 21,
+    "sleepEnd": 7
+  },
+  "minStageSecs": 43200,
+  "sprite": "sheet.png",
+  "frames": 16,
+  "evolutions": [
+    {
+      "to": "agumon",
+      "maxCareMistakes": 3
+    },
+    {
+      "to": "betamon"
+    }
+  ],
+  "id": "koromon"
+}

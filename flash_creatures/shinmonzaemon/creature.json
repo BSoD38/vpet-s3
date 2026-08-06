@@ -1,0 +1,24 @@
+{
+  "name": "ShinMonzaemon",
+  "tier": 6,
+  "attribute": "vaccine",
+  "base": {
+    "hp": 950,
+    "str": 80,
+    "end": 90,
+    "agi": 45,
+    "int": 60
+  },
+  "needs": {
+    "hungerPerHr": 16,
+    "happyPerHr": 10,
+    "poopIntervalS": 14400,
+    "sleepStart": 22,
+    "sleepEnd": 7
+  },
+  "minStageSecs": 1000000000,
+  "sprite": "sheet.png",
+  "frames": 16,
+  "evolutions": [],
+  "id": "shinmonzaemon"
+}

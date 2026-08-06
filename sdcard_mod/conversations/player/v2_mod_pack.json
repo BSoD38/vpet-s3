@@ -1,0 +1,95 @@
+[
+  {
+    "id": "mod/where_from",
+    "title": "Somewhere else",
+    "priority": 60,
+    "repeatable": false,
+    "when": {
+      "minFriendship": 500,
+      "minStage": 2
+    },
+    "start": "n0",
+    "nodes": [
+      {
+        "id": "n0",
+        "text": "I dreamt there were others. Whole rows of them I'd never met. Is that possible?",
+        "choices": [
+          {
+            "text": "More than you'd believe",
+            "to": "many",
+            "effects": {
+              "friendship": 20,
+              "happiness": 6,
+              "setFact": { "knows_of_others": "yes" },
+              "factNote": "You told them there are others.",
+              "drift": { "social": 0.3 }
+            }
+          },
+          {
+            "text": "(let them wonder)",
+            "to": "wonder",
+            "effects": {
+              "happiness": 2,
+              "drift": { "wild": 0.2 }
+            }
+          }
+        ]
+      },
+      {
+        "id": "many",
+        "text": "Rows and rows. I'd like to meet one. Not today. But one day.",
+        "to": "many2"
+      },
+      {
+        "id": "many2",
+        "text": "Thank you for not pretending I imagined it."
+      },
+      {
+        "id": "wonder",
+        "text": "You're not going to tell me. That's all right. I'll keep the dream."
+      }
+    ]
+  },
+  {
+    "id": "mod/strange_taste",
+    "title": "That amber stuff",
+    "priority": 35,
+    "repeatable": true,
+    "when": {
+      "minFriendship": 500
+    },
+    "start": "n0",
+    "nodes": [
+      {
+        "id": "n0",
+        "text": "That amber sticky thing you gave me. I've been thinking about it all morning.",
+        "choices": [
+          {
+            "text": "I'll get you another",
+            "to": "yes",
+            "effects": {
+              "happiness": 6,
+              "drift": { "social": 0.2, "wild": 0.3 }
+            }
+          },
+          {
+            "text": "Not before dinner",
+            "to": "no",
+            "effects": {
+              "happiness": -1,
+              "drift": { "wild": -0.3 }
+            }
+          }
+        ]
+      },
+      {
+        "id": "yes",
+        "text": "You're the best thing that has ever happened to me."
+      },
+      {
+        "id": "no",
+        "text": "That is a very sensible answer and I resent it enormously."
+      }
+    ]
+  }
+]

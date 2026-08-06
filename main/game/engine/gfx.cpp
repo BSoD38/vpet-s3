@@ -224,18 +224,33 @@ void gfx_blit(const Sprite& s, int cx, int cy)
     fb.pushImage(cx - s.w / 2, cy - s.h / 2, s.w, s.h, s.data, s.transp);
 }
 
-void gfx_blit_sprite(LGFX_Sprite* s, int cx, int cy, uint16_t transp)
+// Mirrored (left-to-right flipped) push of s with its top-left at (x, y). Rotate-zoom
+// with zoom_x = -1 / angle 0 is an exact 1:1 reversed copy (nearest sampling on integer
+// steps), so pixel art stays crisp. The pivot is set explicitly: the transform maps the
+// pivot to the destination point, and (w-1)/2 is the geometric center of the pixel grid.
+static void push_mirrored(LGFX_Sprite* s, int x, int y, uint16_t transp)
+{
+    float px = (s->width() - 1) * 0.5f, py = (s->height() - 1) * 0.5f;
+    s->setPivot(px, py);
+    s->pushRotateZoom(&fb, x + px, y + py, 0.0f, -1.0f, 1.0f, transp);
+}
+
+void gfx_blit_sprite(LGFX_Sprite* s, int cx, int cy, uint16_t transp, bool mirror)
 {
     if (!s) return;
-    s->pushSprite(&fb, cx - s->width() / 2, cy - s->height() / 2, transp);
+    int x = cx - s->width() / 2, y = cy - s->height() / 2;
+    if (mirror) push_mirrored(s, x, y, transp);
+    else        s->pushSprite(&fb, x, y, transp);
 }
 
 // Anchor by the sprite's feet: (cx, bottomY) is the bottom-center. Lets creatures of
 // any height stand on the same baseline instead of floating/sinking when centered.
-void gfx_blit_sprite_bottom(LGFX_Sprite* s, int cx, int bottomY, uint16_t transp)
+void gfx_blit_sprite_bottom(LGFX_Sprite* s, int cx, int bottomY, uint16_t transp, bool mirror)
 {
     if (!s) return;
-    s->pushSprite(&fb, cx - s->width() / 2, bottomY - s->height(), transp);
+    int x = cx - s->width() / 2, y = bottomY - s->height();
+    if (mirror) push_mirrored(s, x, y, transp);
+    else        s->pushSprite(&fb, x, y, transp);
 }
 
 // LRU cache of downscaled copies of source sprites. Per-frame AA resampling looked great but
@@ -359,6 +374,69 @@ static LGFX_Sprite* scaled_copy(LGFX_Sprite* s, int maxW, int maxH)
     return e.spr;
 }
 
+// Whether a 16bpp sprite's raw buffer stores rgb565 byte-swapped. Calibrated once by
+// round-tripping a known color through a scratch sprite (same class/config as fb, so
+// the layout matches). Same trick scaled_copy uses for readPixelValue.
+static bool fb565_swapped()
+{
+    static int swapped = -1;
+    if (swapped < 0) {
+        LGFX_Sprite t(&display);
+        t.setColorDepth(16);
+        if (t.createSprite(1, 1)) {
+            t.drawPixel(0, 0, (uint16_t)0xF800u);
+            swapped = (*(const uint16_t*)t.getBuffer() != 0xF800u) ? 1 : 0;
+            t.deleteSprite();
+        } else {
+            swapped = 0;                       // can't calibrate; assume unswapped
+        }
+    }
+    return swapped == 1;
+}
+
+// Mirrored equivalent of fb.pushAlphaImage: composite an argb8888 sprite onto fb with
+// its top-left at (x, y), reading each source row right-to-left. LovyanGFX's alpha
+// blit only reads its buffer forward, so the flip is done here in OUR loop rather
+// than by patching the library or caching a reversed copy -- a mirrored draw costs
+// the same as an unmirrored one and never touches a cache slot. Straight (non-
+// premultiplied) alpha over rgb565, same semantics as pushAlphaImage.
+static void push_alpha_mirrored(LGFX_Sprite* sc, int x, int y)
+{
+    const uint32_t* src = (const uint32_t*)sc->getBuffer();
+    int w = sc->width(), h = sc->height();
+    int x0 = x < 0 ? -x : 0, y0 = y < 0 ? -y : 0;               // clip to fb
+    int x1 = (x + w > GAME_W) ? GAME_W - x : w;
+    int y1 = (y + h > GAME_H) ? GAME_H - y : h;
+    if (x0 >= x1 || y0 >= y1) return;
+
+    const bool swap = fb565_swapped();
+    uint16_t* dst = (uint16_t*)fb.getBuffer();
+    for (int sy = y0; sy < y1; sy++) {
+        const uint32_t* srow = src + sy * w;
+        uint16_t*       drow = dst + (y + sy) * GAME_W + x;
+        for (int sx = x0; sx < x1; sx++) {
+            uint32_t p = srow[w - 1 - sx];                      // <- the mirror
+            uint32_t a = p >> 24;
+            if (a == 0) continue;
+            uint32_t sr = (p >> 16) & 0xFF, sg = (p >> 8) & 0xFF, sb = p & 0xFF;
+            uint32_t out;
+            if (a == 255) {
+                out = ((sr >> 3) << 11) | ((sg >> 2) << 5) | (sb >> 3);
+            } else {
+                uint16_t d = drow[sx];
+                if (swap) d = (uint16_t)((d >> 8) | (d << 8));
+                uint32_t dr = ((d >> 11) & 0x1F) << 3, dg = ((d >> 5) & 0x3F) << 2, db = (d & 0x1F) << 3;
+                uint32_t ia = 255 - a;
+                uint32_t r = (sr * a + dr * ia + 127) / 255;
+                uint32_t g = (sg * a + dg * ia + 127) / 255;
+                uint32_t b = (sb * a + db * ia + 127) / 255;
+                out = ((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3);
+            }
+            drow[sx] = swap ? (uint16_t)((out >> 8) | (out << 8)) : (uint16_t)out;
+        }
+    }
+}
+
 // Drop any cached scaled copies whose source is `src`, freeing their slots. MUST be called
 // before a source sprite is freed: the cache keys on the raw LGFX_Sprite* pointer, and a
 // freed heap address can be reused for a DIFFERENT sprite (e.g. the creature registry's LRU
@@ -379,24 +457,26 @@ void gfx_invalidate_scaled(const void* src)
 
 // Centered at (cx, cy), scaled DOWN to fit maxW x maxH (aspect preserved, AA via a cached
 // alpha copy); sprites already within the box are drawn at native size.
-void gfx_blit_sprite_fit(LGFX_Sprite* s, int cx, int cy, int maxW, int maxH, uint16_t transp)
+void gfx_blit_sprite_fit(LGFX_Sprite* s, int cx, int cy, int maxW, int maxH, uint16_t transp, bool mirror)
 {
     if (!s) return;
     LGFX_Sprite* sc = scaled_copy(s, maxW, maxH);
-    if (!sc) { gfx_blit_sprite(s, cx, cy, transp); return; }
-    fb.pushAlphaImage(cx - sc->width() / 2, cy - sc->height() / 2, sc->width(), sc->height(),
-                      (const lgfx::argb8888_t*)sc->getBuffer());
+    if (!sc) { gfx_blit_sprite(s, cx, cy, transp, mirror); return; }
+    int x = cx - sc->width() / 2, y = cy - sc->height() / 2;
+    if (mirror) push_alpha_mirrored(sc, x, y);   // flip applied while drawing; cache stays orientation-free
+    else fb.pushAlphaImage(x, y, sc->width(), sc->height(), (const lgfx::argb8888_t*)sc->getBuffer());
 }
 
 // Like gfx_blit_sprite_fit but anchored by the feet: (cx, bottomY) is the bottom-center, so
 // a scaled-down big creature still stands on the given baseline. Native size if it already fits.
-void gfx_blit_sprite_fit_bottom(LGFX_Sprite* s, int cx, int bottomY, int maxW, int maxH, uint16_t transp)
+void gfx_blit_sprite_fit_bottom(LGFX_Sprite* s, int cx, int bottomY, int maxW, int maxH, uint16_t transp, bool mirror)
 {
     if (!s) return;
     LGFX_Sprite* sc = scaled_copy(s, maxW, maxH);
-    if (!sc) { gfx_blit_sprite_bottom(s, cx, bottomY, transp); return; }
-    fb.pushAlphaImage(cx - sc->width() / 2, bottomY - sc->height(), sc->width(), sc->height(),
-                      (const lgfx::argb8888_t*)sc->getBuffer());
+    if (!sc) { gfx_blit_sprite_bottom(s, cx, bottomY, transp, mirror); return; }
+    int x = cx - sc->width() / 2, y = bottomY - sc->height();
+    if (mirror) push_alpha_mirrored(sc, x, y);   // flip applied while drawing; cache stays orientation-free
+    else fb.pushAlphaImage(x, y, sc->width(), sc->height(), (const lgfx::argb8888_t*)sc->getBuffer());
 }
 
 // Fill rect [x,y,w,h] by repeating `tile` (tw x th) as an opaque texture. scrollX shifts

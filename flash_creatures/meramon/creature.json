@@ -1,0 +1,29 @@
+{
+  "name": "Meramon",
+  "tier": 4,
+  "attribute": "data",
+  "base": {
+    "hp": 225,
+    "str": 28,
+    "end": 15,
+    "agi": 22,
+    "int": 18
+  },
+  "needs": {
+    "hungerPerHr": 13,
+    "happyPerHr": 12,
+    "poopIntervalS": 10800,
+    "sleepStart": 22,
+    "sleepEnd": 6
+  },
+  "minStageSecs": 259200,
+  "sprite": "sheet.png",
+  "frames": 16,
+  "evolutions": [
+    {
+      "to": "mamemon",
+      "minWins": 15
+    }
+  ],
+  "id": "meramon"
+}

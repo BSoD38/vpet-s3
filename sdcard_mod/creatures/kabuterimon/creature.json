@@ -1,0 +1,29 @@
+{
+  "name": "Kabuterimon",
+  "tier": 4,
+  "attribute": "vaccine",
+  "base": {
+    "hp": 265,
+    "str": 30,
+    "end": 26,
+    "agi": 16,
+    "int": 18
+  },
+  "needs": {
+    "hungerPerHr": 14,
+    "happyPerHr": 12,
+    "poopIntervalS": 10800,
+    "sleepStart": 22,
+    "sleepEnd": 6
+  },
+  "minStageSecs": 259200,
+  "sprite": "sheet.png",
+  "frames": 16,
+  "evolutions": [
+    {
+      "to": "metalmamemon",
+      "minWins": 15
+    }
+  ],
+  "id": "kabuterimon"
+}

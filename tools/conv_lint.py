@@ -128,33 +128,45 @@ def load_ids(path, label):
     return out
 
 
-def collect_files():
-    """Every file the device's scanner will actually read, with its pool."""
+def collect_files(extra_roots=()):
+    """Every file the device's scanner will actually read, with its pool.
+
+    `extra_roots` lets a MOD tree be validated alongside the base content -- point it at whatever
+    you're about to copy to the SD card. Content is checked together on purpose: a mod's
+    `requireSeen` may target a base conversation, and an id collision between the two is the
+    override mechanism rather than a mistake, so both need to be visible at once.
+    """
     found = []
-    for pool in POOLS:
-        d = os.path.join(GAMEDATA, "conversations", pool)
-        if not os.path.isdir(d):
-            warn(f"conversations/{pool}", "pool directory does not exist")
-            continue
-        for entry in sorted(os.listdir(d)):
-            p = os.path.join(d, entry)
-            if os.path.isdir(p):
-                # The scan reads directory entries as files and skips what won't open, so a
-                # nested folder is invisible on device rather than an error. Flag it loudly.
-                err(f"conversations/{pool}/{entry}",
-                    "is a DIRECTORY -- the pool scan is flat, so nothing inside it will ever "
-                    "load. Move the files up and prefix the name instead.")
+    roots = [(GAMEDATA, "")] + [(r, os.path.basename(r.rstrip("/\\")) + ":") for r in extra_roots]
+    for root, tag in roots:
+        for pool in POOLS:
+            d = os.path.join(root, "conversations", pool)
+            if not os.path.isdir(d):
+                if not tag:      # a mod need not ship every pool; base content should
+                    warn(f"conversations/{pool}", "pool directory does not exist")
                 continue
-            if entry.endswith(".json"):
-                found.append((f"{pool}/{entry}", p, pool))
-    if os.path.isdir(CREATURES):
-        for cid in sorted(os.listdir(CREATURES)):
-            d = os.path.join(CREATURES, cid, "conversations")
+            for entry in sorted(os.listdir(d)):
+                p = os.path.join(d, entry)
+                if os.path.isdir(p):
+                    err(f"{tag}conversations/{pool}/{entry}",
+                        "is a DIRECTORY -- the pool scan is flat, so nothing inside it will ever "
+                        "load. Move the files up and prefix the name instead.")
+                    continue
+                if entry.endswith(".json"):
+                    found.append((f"{tag}{pool}/{entry}", p, pool))
+    # Species pools ride along inside each creature's folder, in base content and in mods alike.
+    for croot, tag in [(CREATURES, "")] + [(os.path.join(r, "creatures"),
+                                            os.path.basename(r.rstrip("/\\")) + ":")
+                                           for r in extra_roots]:
+        if not os.path.isdir(croot):
+            continue
+        for cid in sorted(os.listdir(croot)):
+            d = os.path.join(croot, cid, "conversations")
             if not os.path.isdir(d):
                 continue
             for entry in sorted(os.listdir(d)):
                 if entry.endswith(".json"):
-                    found.append((f"{cid}/{entry}", os.path.join(d, entry), "species"))
+                    found.append((f"{tag}{cid}/{entry}", os.path.join(d, entry), "species"))
     return found
 
 
@@ -346,7 +358,7 @@ def check_conversation(label, data, st):
             warn(label, f"node '{nid}' is unreachable")
 
 
-def main():
+def main(extra_roots=()):
     st = {
         "natures": load_ids("natures", "natures"),
         "traits": load_ids("personalities", "personalities"),
@@ -358,7 +370,7 @@ def main():
         "recovery": [],
     }
 
-    files = collect_files()
+    files = collect_files(extra_roots)
     packs = 0
 
     for label, path, _pool in files:
@@ -423,4 +435,6 @@ def main():
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    # Extra roots are mod trees (an SD-card staging folder), validated together with the base
+    # content: python tools/conv_lint.py sdcard_mod
+    sys.exit(main(sys.argv[1:]))

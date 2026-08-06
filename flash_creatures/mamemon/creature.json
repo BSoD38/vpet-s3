@@ -1,0 +1,24 @@
+{
+  "name": "Mamemon",
+  "tier": 5,
+  "attribute": "data",
+  "base": {
+    "hp": 420,
+    "str": 60,
+    "end": 30,
+    "agi": 45,
+    "int": 35
+  },
+  "needs": {
+    "hungerPerHr": 15,
+    "happyPerHr": 12,
+    "poopIntervalS": 10800,
+    "sleepStart": 21,
+    "sleepEnd": 7
+  },
+  "minStageSecs": 1000000000,
+  "sprite": "sheet.png",
+  "frames": 16,
+  "evolutions": [],
+  "id": "mamemon"
+}

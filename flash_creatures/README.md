@@ -96,6 +96,7 @@ Condition fields on an edge (all optional; each defaults to "no requirement"):
 | `minAgi`          | effective Agility ≥ value                            |
 | `minInt`          | effective Intellect ≥ value                          |
 | `minFriendship`   | bond meter ≥ value (0..10000; see FRIENDSHIP_MAX)    |
+| `minWins`         | lifetime battle wins ≥ value                         |
 | `maxCareMistakes` | care‑mistake count ≤ value (fewer = better care)    |
 
 Stat conditions test the **effective** stat (base + what you've trained). Two
@@ -109,11 +110,26 @@ Notes:
 
 ## Sprites
 
-- **PNG**, any size up to 256×256 (48×48 recommended to match the current art).
-- Decoded into PSRAM once when the creature loads, then blitted centered.
+Two formats, chosen by the `"frames"` field:
+
+- **Single pose** (`"frames": 1`, the default): one PNG, up to 128×128
+  (48×48 recommended to match the current art). Shown for every animation state.
+- **16‑frame sheet** (`"frames": 16`): one PNG laid out as a **4×4 grid**, frames
+  running **left‑to‑right, top‑to‑bottom** (the DMC standard). Cell size is derived
+  as `sheetW/4 × sheetH/4`; cells may be non‑square (e.g. 68×48) but every cell of
+  one sheet is the same size, and a cell may not exceed 128×128.
+  `tools/digimon_import.py` packs a folder of 16 individual PNGs into this format.
+
+Frame order in a sheet: `0/1` idle, `2` happy, `3` angry, `4/5` train, `6/7` attack,
+`8/9` eat, `10` refuse ("no" — the engine head‑shakes it by alternating a horizontal
+flip), `11` extra, `12/13` nap, `14` sick, `15` lose.
+
+- Decoded into PSRAM when the creature first shows; a sheet is carved into its 16
+  frames right away.
 - **Transparency:** use fully transparent or fully opaque pixels (hard edges).
   Transparent areas show through; soft/anti‑aliased alpha will fringe against the
-  background because the panel has no per‑pixel alpha.
+  background because the panel has no per‑pixel alpha. Avoid pure magenta
+  (`#FF00FF`) in opaque art — it's the transparency key.
 
 ## Adding a creature
 
@@ -124,10 +140,11 @@ Notes:
 
 ## Current limits
 
-- Registry holds up to **40** creatures and **4** evolution edges per creature.
+- Registry holds up to **40** creatures and **6** evolution edges per creature.
 - **Sprites load lazily** — a creature's PNG is decoded into PSRAM only when it's
-  first shown, and kept in a small LRU cache (16 sprites), so only what's on screen
-  is resident. The roster can grow large without running out of RAM on sprites.
+  first shown, and kept in a small LRU cache (16 creatures; a 16‑frame sheet counts
+  as one entry, ~74–105 KB), so only what's on screen is resident. The roster can
+  grow large without running out of RAM on sprites.
 - Creature **definitions** (the JSON) are still parsed eagerly at boot; that's cheap
   for a modest roster. A very large roster (hundreds of creatures) would also want a
   prebuilt manifest and to keep the bulk of assets on the SD card rather than flash.

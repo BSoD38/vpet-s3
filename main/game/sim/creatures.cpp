@@ -1,8 +1,10 @@
 #include "creatures.hpp"
 #include "gamedata.hpp"                   // gd_num/gd_str (shared JSON accessors)
 #include "engine/gfx.hpp"                 // SPRITE_TRANSP, display
-#include "esp_vfs_fat.h"
+#include "engine/pakfs.hpp"               // mounted mod packs are extra scan roots
+#include "esp_timer.h"                    // boot-scan timing (sizes the pak win)
 #include "esp_log.h"
+#include "esp_heap_caps.h"      // the roster table is allocated in PSRAM
 #include "cJSON.h"
 #include <dirent.h>
 #include <sys/stat.h>
@@ -13,8 +15,9 @@
 
 static const char* TAG = "CREA";
 
-static const char* FLASH_ROOT = "/creatures";
-static const char* SD_ROOT     = "/sdcard/creatures";
+// No flash root: the base roster ships inside base.pak (gamedata partition), scanned via the
+// /pakN roots like any other pack. Loose SD folders remain the final, highest-priority overlay.
+static const char* SD_ROOT = "/sdcard/creatures";
 
 // Max sprite dimension (px). Sprites may be non-square up to this in each axis; a PNG larger
 // than this in either axis is rejected (creature falls back to the "?" sprite). Kept modest so
@@ -77,7 +80,9 @@ const char* attr_short(uint8_t a)
 
 // Decode a PNG file into a fresh PSRAM sprite. Transparent PNG pixels leave the
 // color-key (SPRITE_TRANSP) showing through, which the blit then treats as clear.
-static LGFX_Sprite* load_png_sprite(const char* path)
+// maxW/maxH cap the decoded image (a 16-frame sheet may exceed the per-frame cap;
+// its CELLS are checked by the caller instead).
+static LGFX_Sprite* load_png_sprite(const char* path, uint32_t maxW, uint32_t maxH)
 {
     long n = 0;
     char* buf = read_file(path, &n);
@@ -90,9 +95,9 @@ static LGFX_Sprite* load_png_sprite(const char* path)
     // PNG width/height are big-endian at IHDR (offsets 16 and 20).
     uint32_t w = ((uint32_t)u[16] << 24) | (u[17] << 16) | (u[18] << 8) | u[19];
     uint32_t h = ((uint32_t)u[20] << 24) | (u[21] << 16) | (u[22] << 8) | u[23];
-    if (w == 0 || w > SPRITE_MAX_DIM || h == 0 || h > SPRITE_MAX_DIM) {
+    if (w == 0 || w > maxW || h == 0 || h > maxH) {
         ESP_LOGW(TAG, "sprite %ux%u exceeds %ux%u cap: %s", (unsigned)w, (unsigned)h,
-                 (unsigned)SPRITE_MAX_DIM, (unsigned)SPRITE_MAX_DIM, path);
+                 (unsigned)maxW, (unsigned)maxH, path);
         free(buf);
         return nullptr;
     }
@@ -105,6 +110,61 @@ static LGFX_Sprite* load_png_sprite(const char* path)
     s->drawPng(u, (uint32_t)n);   // decode from memory onto the key-filled canvas
     free(buf);
     return s;
+}
+
+// Fill c.frames[] from the creature's PNG. Single-pose creatures decode straight into
+// frames[0]; 16-frame sheets decode whole, then get carved into 16 small sprites (raw
+// row memcpy -- both are 16bpp PSRAM canvases) so the blit helpers and the downscale
+// cache only ever see plain per-frame sprites. Returns false on any failure.
+static bool load_frames(Creature& c)
+{
+    if (c.frameCount <= 1) {
+        c.frames[0] = load_png_sprite(c.spritePath, SPRITE_MAX_DIM, SPRITE_MAX_DIM);
+        return c.frames[0] != nullptr;
+    }
+
+    // Sheet: 4x4 grid, cell = sheetW/4 x sheetH/4; the per-frame cap applies per cell.
+    LGFX_Sprite* sheet = load_png_sprite(c.spritePath, SPRITE_MAX_DIM * 4, SPRITE_MAX_DIM * 4);
+    if (!sheet) return false;
+    int sw = sheet->width(), sh = sheet->height();
+    if (sw % 4 || sh % 4) {
+        ESP_LOGW(TAG, "sheet %dx%d not a 4x4 grid: %s", sw, sh, c.spritePath);
+        delete sheet;
+        return false;
+    }
+    int fw = sw / 4, fh = sh / 4;
+
+    const uint16_t* src = (const uint16_t*)sheet->getBuffer();
+    bool ok = true;
+    for (int f = 0; f < FRM_COUNT && ok; f++) {
+        LGFX_Sprite* s = new LGFX_Sprite(&display);
+        s->setPsram(true);
+        s->setColorDepth(16);
+        if (!s->createSprite(fw, fh)) { delete s; ok = false; break; }
+        uint16_t* dst = (uint16_t*)s->getBuffer();
+        int ox = (f % 4) * fw, oy = (f / 4) * fh;
+        for (int y = 0; y < fh; y++)
+            memcpy(dst + y * fw, src + (oy + y) * sw + ox, fw * sizeof(uint16_t));
+        c.frames[f] = s;
+    }
+    delete sheet;
+    if (!ok) {
+        ESP_LOGW(TAG, "frame alloc failed: %s", c.spritePath);
+        for (int f = 0; f < FRM_COUNT; f++) { delete c.frames[f]; c.frames[f] = nullptr; }
+    }
+    return ok;
+}
+
+// Free every decoded frame of an entry (scaled copies are invalidated first: the
+// cache keys on the source sprite's address, which is about to be freed/reused).
+static void free_frames(Creature& c)
+{
+    for (int f = 0; f < FRM_COUNT; f++) {
+        if (!c.frames[f]) continue;
+        gfx_invalidate_scaled(c.frames[f]);
+        delete c.frames[f];
+        c.frames[f] = nullptr;
+    }
 }
 
 // --- registry ----------------------------------------------------------------
@@ -155,6 +215,12 @@ bool CreatureRegistry::parseFile(const char* path, Creature& c)
 
     c.minStageSecs = (float)gd_num(root, "minStageSecs", 1e9);
     gd_str(root, "sprite", c.spriteFile, sizeof c.spriteFile, "sprite.png");
+    int frames = (int)gd_num(root, "frames", 1);
+    if (frames != 1 && frames != FRM_COUNT) {
+        ESP_LOGW(TAG, "%s: frames=%d unsupported (want 1 or %d); using 1", path, frames, FRM_COUNT);
+        frames = 1;
+    }
+    c.frameCount = (uint8_t)frames;
 
     c.evoCount = 0;
     cJSON* evos = cJSON_GetObjectItem(root, "evolutions");
@@ -178,7 +244,7 @@ bool CreatureRegistry::parseFile(const char* path, Creature& c)
         }
     }
     cJSON_Delete(root);
-    c.sprite = nullptr;
+    for (int f = 0; f < FRM_COUNT; f++) c.frames[f] = nullptr;
     return true;
 }
 
@@ -220,39 +286,39 @@ void CreatureRegistry::scanRoot(const char* root, const char* srcTag)
     closedir(d);
 }
 
-// Lazy sprite access with an LRU cache. A creature's PNG is decoded into PSRAM on
-// first display and kept until the cache is full, then the least-recently-shown one
-// is evicted. This keeps the resident set tiny (only what's on screen) so the roster
-// can grow far past what would fit if every sprite were decoded at once.
-LGFX_Sprite* CreatureRegistry::sprite(int idx)
+// Lazy frame access with an LRU cache. A creature's PNG is decoded into PSRAM on
+// first display (a 16-frame sheet is carved into its frames right away -- one cache
+// entry covers the whole set) and kept until the cache is full, then the least-
+// recently-shown ENTRY is evicted. This keeps the resident set tiny (only what's on
+// screen) so the roster can grow far past what would fit decoded all at once.
+LGFX_Sprite* CreatureRegistry::frame(int idx, int f)
 {
     if (idx < 0 || idx >= count_) return nullptr;
     Creature& c = list_[idx];
+    if (f < 0) f = 0;
+    if (f >= c.frameCount) f = (c.frameCount <= 1) ? 0 : FRM_COUNT - 1;
 
-    if (c.sprite) { c.spriteTick = ++spriteClock_; return c.sprite; }   // hit -> mark MRU
-    if (c.spriteMiss || c.spritePath[0] == '\0') return nullptr;        // no file / already failed
+    if (c.frames[0]) { c.spriteTick = ++spriteClock_; return c.frames[f]; }   // hit -> mark MRU
+    if (c.spriteMiss || c.spritePath[0] == '\0') return nullptr;              // no file / already failed
 
-    // Evict the least-recently-used decoded sprite(s) to stay under the cap. Entries
+    // Evict the least-recently-used decoded entry(s) to stay under the cap. Entries
     // with no file path (e.g. the built-in egg) are never evicted (can't reload).
     while (loadedSprites_ >= SPRITE_CACHE) {
         int victim = -1;
         uint32_t oldest = 0xFFFFFFFFu;
         for (int i = 0; i < count_; i++)
-            if (list_[i].sprite && list_[i].spritePath[0] && list_[i].spriteTick < oldest) {
+            if (list_[i].frames[0] && list_[i].spritePath[0] && list_[i].spriteTick < oldest) {
                 oldest = list_[i].spriteTick;
                 victim = i;
             }
         if (victim < 0) break;                     // nothing evictable; load anyway
-        gfx_invalidate_scaled(list_[victim].sprite);   // drop scaled copies before the address is freed/reused
-        delete list_[victim].sprite;
-        list_[victim].sprite = nullptr;
+        free_frames(list_[victim]);
         loadedSprites_--;
     }
 
-    c.sprite = load_png_sprite(c.spritePath);
-    if (c.sprite) { c.spriteTick = ++spriteClock_; loadedSprites_++; }
-    else          { c.spriteMiss = 1; }            // stop retrying a bad/missing file
-    return c.sprite;
+    if (load_frames(c)) { c.spriteTick = ++spriteClock_; loadedSprites_++; }
+    else                { c.spriteMiss = 1; }      // stop retrying a bad/missing file
+    return c.frames[f];
 }
 
 void CreatureRegistry::resolveEdges()
@@ -277,28 +343,52 @@ void CreatureRegistry::addBuiltinEgg()
     c.poopIntervalS = 1e9f;
     c.evoCount = 0;                                // can't evolve without data files
 
-    // No baked sprite: c.sprite stays null (from memset) and spritePath is empty, so
-    // sprite() returns null and the scenes draw the "?" placeholder for it.
+    // No baked sprite: c.frames[] stays null (from memset) and spritePath is empty, so
+    // frame() returns null and the scenes draw the "?" placeholder for it.
     list_[count_++] = c;
     ESP_LOGW(TAG, "no creature data readable; using built-in egg (placeholder art)");
 }
 
 void CreatureRegistry::loadAll()
 {
+    // The roster table lives in PSRAM (see list_): ~120 KB at the current cap, which has no
+    // business occupying internal RAM for data that's read on lookup and on draw. Aborting on
+    // failure matches gfx_init(): without the table every later access is a null dereference.
+    if (!list_) {
+        const size_t bytes = sizeof(Creature) * MAX;
+        list_ = (Creature*)heap_caps_malloc(bytes, MALLOC_CAP_SPIRAM);
+        if (!list_) {
+            ESP_LOGE(TAG, "PSRAM alloc for the roster table (%u bytes, %d slots) failed",
+                     (unsigned)bytes, MAX);
+            abort();
+        }
+        memset(list_, 0, bytes);
+        ESP_LOGI(TAG, "roster table: %u bytes in PSRAM (%d slots, %u bytes each)",
+                 (unsigned)bytes, MAX, (unsigned)sizeof(Creature));
+    }
     count_ = 0;
 
-    esp_vfs_fat_mount_config_t cfg = {};
-    cfg.max_files = 4;
-    cfg.format_if_mount_failed = false;
-    esp_err_t e = esp_vfs_fat_spiflash_mount_ro(FLASH_ROOT, "creatures", &cfg);
-    if (e != ESP_OK)
-        ESP_LOGW(TAG, "flash creatures mount failed (%s)", esp_err_to_name(e));
-
-    scanRoot(FLASH_ROOT, "flash");   // base game
-    scanRoot(SD_ROOT,    "sd");      // mods overlay (override base on id clash)
+    // Overlay order = who wins an id clash: packs in mount order, then loose SD files beat
+    // everything -- so a player can always drop a single folder on the card to patch over a
+    // pack without re-packing it.
+    //
+    // There is no separate flash root any more. The base roster used to be loose files in a
+    // dedicated `creatures` partition mounted at /creatures; it now lives inside base.pak in
+    // the gamedata partition and is reached through /pak0, which app.cpp mounts FIRST so the
+    // base game stays the weakest layer. Note the cost of that: the base roster is one file
+    // now, so a corrupt pack loses the whole roster rather than one creature -- which is what
+    // the update system's per-partition hashing and boot repair exist to catch.
+    const int64_t t0 = esp_timer_get_time();
+    for (int i = 0; i < pakfs_count(); i++) {
+        char root[32];
+        snprintf(root, sizeof root, "%s/creatures", pakfs_root(i));
+        scanRoot(root, "pak");
+    }
+    scanRoot(SD_ROOT, "sd");         // loose-file mods: the final overlay
 
     if (count_ == 0) { addBuiltinEgg(); return; }
 
     resolveEdges();   // sprites decode lazily on first display (see sprite())
-    ESP_LOGI(TAG, "registry ready: %d creatures", count_);
+    ESP_LOGI(TAG, "registry ready: %d creatures in %d ms", count_,
+             (int)((esp_timer_get_time() - t0) / 1000));
 }

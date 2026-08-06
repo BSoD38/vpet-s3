@@ -127,6 +127,7 @@ static bool in_window(int h, int start, int end)
 }
 
 bool Pet::checkRefused() { bool r = refused_; refused_ = false; return r; }
+bool Pet::checkAte()     { bool r = ate_;     ate_     = false; return r; }
 
 const char* Pet::stageName() const
 {
@@ -384,6 +385,33 @@ void Pet::markSaved()
     save_.endBatch();
 }
 
+bool Pet::savedSpeciesMissing(char* idOut, int n)
+{
+    // Deliberately a separate read into a LOCAL rather than a peek at s_: this runs before
+    // boot(), and must leave the object exactly as it found it. The validity test mirrors
+    // boot()'s, because a blob boot() would reject is not a creature at risk -- it just
+    // hatches a new egg, which is correct and not worth a prompt.
+    PetState probe{};
+    if (!save_.load(probe) || probe.magic != PET_MAGIC || probe.version != PET_VERSION)
+        return false;
+    probe.creatureId[sizeof(probe.creatureId) - 1] = '\0';
+    if (reg_.indexOf(probe.creatureId) >= 0) return false;
+    if (idOut && n > 0) {
+        strncpy(idOut, probe.creatureId, (size_t)n - 1);
+        idOut[n - 1] = '\0';
+    }
+    return true;
+}
+
+void Pet::forgetSave()
+{
+    // No id in this log: forgetSave() runs BEFORE boot(), so s_ has not been loaded yet and
+    // its creatureId is still empty. The caller names the creature it is discarding.
+    ESP_LOGW(TAG, "discarding the saved creature at the player's request");
+    PetState blank{};      // magic 0, so boot()'s validity check fails and newEgg() runs
+    save_.store(blank);
+}
+
 void Pet::boot()
 {
     PCF85063_Read_Time(&datetime);   // seed the RTC global before first clock_now()
@@ -392,7 +420,11 @@ void Pet::boot()
         if (s_.gameSpeed == 0) s_.gameSpeed = 1;
         s_.creatureId[sizeof(s_.creatureId) - 1] = '\0';   // guard against a corrupt/unterminated id
         idx_ = reg_.indexOf(s_.creatureId);                // resolve identity before ticking
-        if (idx_ < 0) {                                    // creature gone (e.g. a mod was removed)
+        // BACKSTOP ONLY. App::init calls savedSpeciesMissing() first and prompts the player,
+        // because reaching here rewrites the species and markSaved() at the end of boot()
+        // persists it on the spot -- irreversible. This branch survives so a caller that
+        // skips the check still gets a running game rather than a null creature.
+        if (idx_ < 0) {
             ESP_LOGW(TAG, "saved creature '%s' not in registry; falling back to egg", s_.creatureId);
             idx_ = reg_.indexOf("egg");
             if (idx_ < 0 && reg_.count() > 0) idx_ = 0;
@@ -467,6 +499,7 @@ bool Pet::canEat()
 void Pet::feed(const Food& f)
 {
     if (!canEat()) return;
+    ate_ = true;   // accepted -- the home scene plays the eat animation off this
 
     const bool overfed = (s_.hunger >= OVERFEED_AT);
 

@@ -1,0 +1,20 @@
+{
+  "id": "treat",
+  "name": "Deluxe Treat",
+  "desc": "SD OVERRIDE - replaces the base treat.",
+  "tags": ["sweet", "snack"],
+
+  "fills": 16,
+  "happiness": 16,
+  "health": -6,
+  "color": "#8f4fd4",
+
+  "drift": {
+    "energetic": 0.3,
+    "social": 0.5,
+    "wild": 0.8
+  },
+
+  "cost": 60,
+  "rarity": "rare"
+}

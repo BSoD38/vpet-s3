@@ -1,0 +1,29 @@
+{
+  "name": "Monzaemon",
+  "tier": 5,
+  "attribute": "vaccine",
+  "base": {
+    "hp": 550,
+    "str": 45,
+    "end": 50,
+    "agi": 22,
+    "int": 30
+  },
+  "needs": {
+    "hungerPerHr": 15,
+    "happyPerHr": 13,
+    "poopIntervalS": 10800,
+    "sleepStart": 21,
+    "sleepEnd": 7
+  },
+  "minStageSecs": 345600,
+  "sprite": "sheet.png",
+  "frames": 16,
+  "evolutions": [
+    {
+      "to": "shinmonzaemon",
+      "minWins": 40
+    }
+  ],
+  "id": "monzaemon"
+}

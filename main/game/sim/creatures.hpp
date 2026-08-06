@@ -7,6 +7,22 @@
 // Base creatures live in the flash `creatures` partition (mounted /creatures); extra
 // creatures may be dropped on the SD card (/sdcard/creatures). On an id collision the
 // SD copy wins (so the card can override/mod the base game).
+//
+// A creature's art is either a single pose ("frames": 1, the default) or a 16-frame
+// DMC-style sheet ("frames": 16): one PNG laid out as a 4x4 grid, indices running
+// left-to-right then top-to-bottom, cell size = sheetW/4 x sheetH/4. The sheet is
+// carved into 16 small sprites at decode time so every existing blit helper (and the
+// downscale cache) keeps working on plain per-frame sprites.
+
+// Frame indices within a 16-frame sheet (the DMC standard order). Single-sprite
+// creatures show their one pose for every index, so callers can use these freely.
+enum SheetFrame : uint8_t {
+    FRM_IDLE1 = 0, FRM_IDLE2, FRM_HAPPY, FRM_ANGRY,
+    FRM_TRAIN1, FRM_TRAIN2, FRM_ATK1, FRM_ATK2,
+    FRM_EAT1, FRM_EAT2, FRM_NOPE, FRM_EXTRA,
+    FRM_NAP1, FRM_NAP2, FRM_SICK, FRM_LOSE,
+    FRM_COUNT,
+};
 
 // Battle attribute for the type triangle: Vaccine > Data > Virus > Vaccine. Free is
 // neutral (no advantage either way). Stored on each Creature; drives combat type bonuses.
@@ -31,6 +47,8 @@ struct EvoEdge {
     uint32_t minWins;            // battle wins required (0 = ignore)
     uint8_t  maxCareMistakes;    // 255 = ignore (an always-eligible fallback edge)
 };
+// 6 edges: the DMC V1 lines need 5 (4 branches + a Numemon fallback), +1 headroom.
+static const int MAX_EVOS = 6;
 
 // One creature = one node in the evolution tree.
 struct Creature {
@@ -43,18 +61,24 @@ struct Creature {
     float    hungerPerHr, happyPerHr, poopIntervalS;
     uint8_t  sleepStart, sleepEnd;
     float    minStageSecs;       // min time as this creature before it may evolve
-    EvoEdge  evos[4];
+    EvoEdge  evos[MAX_EVOS];
     uint8_t  evoCount;
-    char     spriteFile[24];     // sprite filename from the config (e.g. "sprite.png")
+    char     spriteFile[24];     // sprite filename from the config (e.g. "sheet.png")
     char     spritePath[104];    // resolved absolute path to the sprite (flash or SD)
-    LGFX_Sprite* sprite;         // decoded PNG in PSRAM (lazy; nullptr until first shown / after eviction)
+    uint8_t  frameCount;         // 1 (single pose) or 16 (4x4 DMC sheet)
+    LGFX_Sprite* frames[FRM_COUNT];  // decoded frames in PSRAM (lazy; null until shown / after eviction)
     uint32_t spriteTick;         // LRU timestamp of last access (for eviction)
     uint8_t  spriteMiss;         // 1 = decode already failed, don't keep retrying
 };
 
 class CreatureRegistry {
 public:
-    static const int MAX = 40;
+    // Cap on installed creatures. Cheap to raise now that the table lives in PSRAM (see list_):
+    // it costs ~600 bytes of PSRAM per slot and none of the scarce internal heap. This is a CAP,
+    // not a count, so an unused slot costs nothing but address space. What actually limits a big
+    // roster is BOOT TIME -- every installed creature is one directory open plus one JSON parse --
+    // and resolveEdges() being O(n^2) in the installed count.
+    static const int MAX = 200;
     static const int SPRITE_CACHE = 16;    // max decoded sprites kept resident (LRU-evicted)
 
     void loadAll();                        // mount flash, scan flash + SD, resolve edges (sprites are lazy)
@@ -62,14 +86,20 @@ public:
     int  indexOf(const char* id) const;    // registry index for an id, or -1
     const Creature& at(int i) const { return list_[i]; }
 
-    // Sprite for a creature, decoded on first use and cached (LRU); nullptr if none.
-    // Cheap to call every frame: a cache hit just bumps the LRU timestamp.
-    LGFX_Sprite* sprite(int idx);
+    // Default pose for a creature (frame 0 = Idle1), decoded on first use and cached
+    // (LRU); nullptr if none. Cheap to call every frame: a hit just bumps the LRU clock.
+    LGFX_Sprite* sprite(int idx) { return frame(idx, FRM_IDLE1); }
+
+    // A specific sheet frame (SheetFrame). Single-pose creatures return their one
+    // sprite for any index, so animation code needs no special-casing.
+    LGFX_Sprite* frame(int idx, int f);
 
 private:
-    Creature list_[MAX];
+    // ~600 bytes per entry, so the whole table is ~120 KB -- far too much to sit in internal RAM
+    // for something only read when a creature is looked up or drawn. Allocated once in loadAll().
+    Creature* list_ = nullptr;
     int      count_ = 0;
-    int      loadedSprites_ = 0;           // how many entries currently hold a decoded sprite
+    int      loadedSprites_ = 0;           // how many entries currently hold decoded frames
     uint32_t spriteClock_ = 0;             // monotonically increasing LRU clock
 
     int  upsert(const char* id);           // find-or-append; returns index (or -1 if full)

@@ -33,6 +33,11 @@ public:
     void    loadStr(const char* key, char* out, int n, const char* def) const;  // string kept out of the blob
     void    storeStr(const char* key, const char* v) const;
 
+    // Factory reset: erase the ENTIRE NVS partition (pet, drift, conversations, nickname,
+    // tower floor, settings -- everything player-owned lives there) and restart the chip.
+    // Does not return. The next boot finds empty storage and starts a new game.
+    [[noreturn]] void factoryReset() const;
+
 private:
     // Write-handle plumbing for beginBatch()/endBatch(). uint32_t IS nvs_handle_t; kept
     // untyped here so this header needn't pull in nvs.h.

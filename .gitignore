@@ -1,6 +1,14 @@
 # --- ESP-IDF build output ---
 /build/
 
+# --- Packaged SD-card update (tools/make_update.py output) ---
+/sd-update/
+
+# --- Built mod packs (tools/make_paks.py output) ---
+# Regenerated in one command from flash_creatures/ + flash_gamedata/ + sdcard_mod/,
+# which ARE tracked; committing the binaries would just let them go stale silently.
+/sd-paks/
+
 # --- Generated SDK config ---
 # Regenerated from sdkconfig.defaults by `idf.py set-target` / build.
 # sdkconfig.defaults IS tracked (it holds the intentional config).

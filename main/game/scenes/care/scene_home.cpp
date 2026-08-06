@@ -15,9 +15,17 @@
 static const Sprite SPR_FALLBACK { spr_unknown_data, SPRITE_W, SPRITE_H, SPRITE_TRANSP };  // "?" when a sprite can't be shown
 
 static const int HORIZON = GAME_H * 2 / 3;
-static const int PET_CX  = GAME_W / 2;
-static const int PET_FEET = HORIZON - 3;    // baseline the creature's feet rest on (fits sprites up to 144 tall)
+// Baseline the creature's feet rest on. gfx_blit_sprite_bottom puts the sprite's LAST ROW at
+// bottomY-1, and the grass row starts at HORIZON, so +2 overlaps the feet two rows into the
+// grass and reads as planted. This used to be HORIZON-3, leaving a 4px band of sky under the
+// feet: invisible while the old bob swung +-4px through the ground line, but the footfall bob
+// only ever lifts UP, so the gap became a permanent hover. Anything that changes the bob's
+// sign has to be checked against this constant.
+static const int PET_FEET = HORIZON + 2;
 static const int PET_HIT_MARGIN = 8;        // petting-zone slack around the sprite's box
+// The creature is no longer pinned to the centre: it walks the ground between these insets
+// (measured to the sprite's EDGE, so wide creatures get the same clearance as narrow ones).
+static const int WALK_MARGIN = 6;
 
 // bottom action bar (quick care actions) + top-right menu button
 static const int   ACT_N  = 4;
@@ -56,6 +64,10 @@ static const float POKE_HOP_TIME   = 0.25f;   // quick poke hop; also the min ga
 static const float PLAY_COOLDOWN   = 1.5f;    // lockout after a pet chunk or a completed poke run;
                                               // the hearts / sparkles linger for exactly this long
 static const float REFUSE_TIME     = 0.6f;    // "no" head-shake duration
+// Idle flourish played on some of the wander director's stops (see update()). Kept well under
+// half so most stops are just a stop -- these are punctuation, not the main motion.
+static const int   IDLE_POSE_PCT   = 25;      // % of stops that strike a pose
+static const float IDLE_POSE_TIME  = 1.1f;
 // Bonding: petting and completed poke runs nudge the friendship meter (persisted at
 // the next autosave/care action, matching how play() defers happiness saves).
 static const int   FR_PET          = 2;       // per earned rub chunk
@@ -162,13 +174,19 @@ void SceneHome::update(float dt)
         batPct_   = battery_pct();
     }
 
-    // Petting zone tracks the creature's actual sprite size (feet-anchored baseline).
+    // Petting zone tracks the creature's actual sprite size (feet-anchored baseline) and
+    // FOLLOWS it along the ground -- otherwise you would be rubbing empty grass. Still no
+    // bob applied: the box stays vertically stable so a rub can't be shaken off it. The x
+    // is last frame's (the walk is stepped at the end of update, once every reaction that
+    // could stop it is known), which at ~18 px/s is a fifth of a pixel behind.
     LGFX_Sprite* petSpr = app().creatures.sprite(pet.creatureIndex());
     int psw = petSpr ? petSpr->width()  : SPRITE_W;
     int psh = petSpr ? petSpr->height() : SPRITE_H;
-    int bodyCy = PET_FEET - psh / 2;              // no bob here: keep the hit box stable
+    walk_.setSpan(WALK_MARGIN + psw / 2, GAME_W - WALK_MARGIN - psw / 2);
+    int bodyCx = (int)walk_.x();
+    int bodyCy = PET_FEET - psh / 2;
     int hzW = psw / 2 + PET_HIT_MARGIN, hzH = psh / 2 + PET_HIT_MARGIN;
-    bool onPetZone = Rect{ PET_CX - hzW, bodyCy - hzH, hzW * 2, hzH * 2 }.contains(tx_, ty_);
+    bool onPetZone = Rect{ bodyCx - hzW, bodyCy - hzH, hzW * 2, hzH * 2 }.contains(tx_, ty_);
     bool interactive = p.stage != STAGE_EGG && !p.lightsOff && !p.sick;
     bool overPet = interactive && onPetZone;    // can actually pet/poke
     overPet_ = overPet;
@@ -176,13 +194,19 @@ void SceneHome::update(float dt)
     bool justPressed  = down_ && !wasDown_;
     bool justReleased = !down_ && wasDown_;
 
+    // Pose layers: sim state drives the persistent base; short-lived events overlay it.
+    anim_.tick(dt);
+    anim_.setBase(p.lightsOff ? Anim::Nap : p.sick ? Anim::Sick : Anim::Idle);
+    if (pet.checkAte()) anim_.react(Anim::Eat, 2.4f);   // fed from SceneFeed; play it on arrival
+
     // "no" wiggle: refused from the menu (e.g. feed while sick), or from touching a sick pet
-    if (pet.checkRefused()) refuseTimer_ = REFUSE_TIME;
-    if (justPressed && onPetZone && p.sick) refuseTimer_ = REFUSE_TIME;
+    auto refuse = [&] { refuseTimer_ = REFUSE_TIME; anim_.react(Anim::Nope, REFUSE_TIME); };
+    if (pet.checkRefused()) refuse();
+    if (justPressed && onPetZone && p.sick) refuse();
     // An UPSET creature won't be touched (PetMood): refuse at first contact and never arm a
     // gesture, so no rub ring appears and no bond can be farmed from a refusing creature.
     // (Food is still accepted -- that's the way back.)
-    if (justPressed && overPet && pet.isUpset()) refuseTimer_ = REFUSE_TIME;
+    if (justPressed && overPet && pet.isUpset()) refuse();
 
     if (justPressed) {
         // arm a gesture only if the touch begins on the creature (and it accepts touch)
@@ -209,6 +233,7 @@ void SceneHome::update(float dt)
                     if (pet.play(PET_CHUNK, PLAY_AFFECTION)) {
                         pet.addFriendship(FR_PET);
                         playCooldown_ = PLAY_COOLDOWN;        // hearts linger for the cooldown
+                        anim_.react(Anim::Happy, PLAY_COOLDOWN);
                     }
                 }
             }
@@ -220,10 +245,12 @@ void SceneHome::update(float dt)
         // cumulative — a run of 3..6 pokes earns the happiness reward.
         if (pokeCd_ <= 0.0f && touchDur_ < POKE_MAX_TIME && rubDist_ < POKE_MAX_DIST) {
             hopTimer_ = POKE_HOP_TIME;          // every poke bounces the pet
+            anim_.react(Anim::Happy, POKE_HOP_TIME);
             if (++pokeCount_ >= pokeTarget_) {  // run complete -> reward + full lockout
                 if (pet.play((float)POKE_CHUNK, PLAY_ROUGH)) {   // refused = no bond, no sparkles
                     pet.addFriendship(FR_POKE);
                     sparkTimer_ = PLAY_COOLDOWN; // sparkles linger for the whole cooldown
+                    anim_.react(Anim::Happy, PLAY_COOLDOWN);
                 }
                 pokeCd_     = PLAY_COOLDOWN;    // can't poke again until they clear
                 pokeCount_  = 0;
@@ -233,6 +260,37 @@ void SceneHome::update(float dt)
             }
         }
         touchActive_ = false;
+    }
+
+    // Locomotion. Stepped LAST so every reaction armed above is already visible to
+    // anim_.walkCycle(), which is true only while the two-frame walk pose is on screen --
+    // that one test covers asleep, sick, eating, refusing and the petting-reward wiggle, so
+    // none of them needs naming here. What is left is the cases where the walk cycle IS
+    // showing but travelling would be wrong:
+    //   - an egg, which has no legs to walk on;
+    //   - a finger on the creature, so it can't stroll out from under a rub;
+    //   - an upset creature (PetMood), which sulks on the spot. It already refuses to be
+    //     touched, and standing still says that better than pacing would.
+    // The two are separate because showing the walk pose and being allowed to cover ground
+    // are different questions: the first is the animation's business, the second the scene's.
+    bool touched    = touchActive_ || (down_ && overPet);
+    bool stepping   = anim_.walkCycle();
+    bool travelling = p.stage != STAGE_EGG && !touched && !pet.isUpset();
+    walk_.update(dt, stepping, travelling, anim_.stepPhase());
+    anim_.face(walk_.facingRight());   // DMC sprites face left, so mirror == walking right
+
+    // Idle flourish: when the wander director stops the creature, it sometimes strikes a pose
+    // before moving on. Most stops stay plain on purpose -- the walk-cycle bob keeps it alive
+    // while it stands, and something that emotes at every single stop reads as twitchy rather
+    // than alive. Mood-appropriate, so even the flavour carries care information rather than
+    // being noise: a grump if it wants something, a pleased bounce if it doesn't. Safe to
+    // reuse Happy (the petting reward pose) -- hearts are drawn off playCooldown_, so there
+    // is no false reward signal. The reaction stops the walk cycle for its duration, which
+    // freezes the director, so the rest simply resumes when the pose is done.
+    if (walk_.takeRestCue() && (int)(esp_random() % 100) < IDLE_POSE_PCT) {
+        int ht = care_tier(p.hunger), mt = care_tier(p.happiness);
+        anim_.react((ht < mt ? ht : mt) <= CARE_TIER_NEEDY ? Anim::Angry : Anim::Happy,
+                    IDLE_POSE_TIME);
     }
 
     prevx_ = tx_; prevy_ = ty_; wasDown_ = down_;
@@ -279,6 +337,20 @@ static void draw_mood(int x, int y, float phase, bool angry)
     }
 }
 
+// Cues hung off the creature (badge, mood cloud, SICK/Zzz text) used to sit at a fixed
+// centre and were always safely on screen. Now that the creature walks to both edges they
+// have to be clamped, or they slide off with it.
+static int clamp_left(int x, int w)   // left-anchored (text): keep [x, x+w) on screen
+{
+    if (x < 2) return 2;
+    return (x + w > GAME_W - 2) ? GAME_W - 2 - w : x;
+}
+static int clamp_centre(int x, int r)  // centre-anchored (glyphs of radius r)
+{
+    if (x < r) return r;
+    return (x > GAME_W - r) ? GAME_W - r : x;
+}
+
 static void draw_attention(int x, int y, float phase, uint16_t color)
 {
     int r = 9 + (int)(2.0f * sinf(phase * 5.0f));
@@ -307,13 +379,21 @@ void SceneHome::render()
     // side-to-side "no" head-shake when refusing an action.
     int wig = refuseTimer_ > 0.0f
                   ? (int)(7.0f * sinf(t_ * 28.0f) * (refuseTimer_ / REFUSE_TIME)) : 0;
-    int cx = PET_CX + wig;
+    int cx = (int)walk_.x() + wig;
     int hop = hopTimer_ > 0.0f ? -(int)(12.0f * (hopTimer_ / POKE_HOP_TIME)) : 0;
-    int feet = PET_FEET + (int)(4.0f * sinf(t_ * 2.0f)) + hop;   // baseline + idle bob + poke hop
-    LGFX_Sprite* spr = app().creatures.sprite(pet.creatureIndex());   // lazy-loaded + cached
+    // baseline + the footfall bob + poke hop. walk_.lift() is the ONLY idle vertical motion:
+    // it completes exactly one rise-and-fall per animation frame, is phase-locked to it, and
+    // is 0 whenever the creature isn't actually covering ground -- so a standing creature
+    // holds its height while its walk frames keep alternating on the spot. There used to be a
+    // second, free-running "breathing" bob added on top, and because its period had nothing to
+    // do with the cadence the two slid in and out of phase -- which made the walk look wrong.
+    int feet = PET_FEET + walk_.lift() + hop;
+    // Current pose frame (idle flip / nap / sick / reactions); single-pose creatures
+    // (the placeholder line, the egg) return their one sprite for any frame index.
+    LGFX_Sprite* spr = app().creatures.frame(pet.creatureIndex(), anim_.frame());   // lazy-loaded + cached
     int psh = spr ? spr->height() : SPRITE_H;
     int cy = feet - psh / 2;                                    // body center (for ring/hearts/markers)
-    if (spr) gfx_blit_sprite_bottom(spr, cx, feet, SPRITE_TRANSP);
+    if (spr) gfx_blit_sprite_bottom(spr, cx, feet, SPRITE_TRANSP, anim_.mirrored());
     else     gfx_blit(SPR_FALLBACK, cx, feet - SPRITE_H / 2);   // 48px "?" fallback, feet-anchored
 
     // Rub-progress ring: only while actively able to pet (not during cooldown).
@@ -344,8 +424,8 @@ void SceneHome::render()
     }
 
     // status markers
-    if (p.sick)      gfx_text(cx - 20, cy - 42, 2, col::warn, "SICK");
-    if (p.lightsOff) gfx_text(cx + 20, cy - 36, 2, col::white, "Zzz");
+    if (p.sick)      gfx_text(clamp_left(cx - 20, 48), cy - 42, 2, col::warn, "SICK");
+    if (p.lightsOff) gfx_text(clamp_left(cx + 20, 36), cy - 36, 2, col::white, "Zzz");
 
     // Speech bubble: the creature has something to say. Deliberately PERSISTENT -- it doesn't
     // time out and vanish, so the payoff for a high bond can't be missed by looking away.
@@ -381,13 +461,14 @@ void SceneHome::render()
     if (!p.lightsOff && p.stage != STAGE_EGG) {
         int by = feet - psh - 10;                  // above the head, whatever the sprite size
         if (by < cueMinY + 6) by = cueMinY + 6;    // ...but never riding up into the HUD/overlay
+        int bx = clamp_centre(cx - 44, 14);        // beside the head, but never off the edge
         if (pet.isUpset()) {
-            draw_mood(cx - 44, by, t_, pet.mood() == MOOD_ANGRY);
+            draw_mood(bx, by, t_, pet.mood() == MOOD_ANGRY);
         } else {
             int ht = care_tier(p.hunger), mt = care_tier(p.happiness);
             int worst = ht < mt ? ht : mt;
             if (worst <= CARE_TIER_NEEDY)
-                draw_attention(cx - 44, by, t_, care_tier_color(worst));
+                draw_attention(bx, by, t_, care_tier_color(worst));
         }
     }
 
@@ -441,8 +522,9 @@ void SceneHome::render()
     // Drawn over the sky just below the HUD (above the pet) so it clips nothing.
     if (app().debugOverlay) {
         fb.fillRect(0, 48, GAME_W, 38, rgb565(0, 0, 0));
-        gfx_text(4, 50, 1, col::good, "down%d over%d act%d xy%d,%d",
-                 down_, overPet_, touchActive_, tx_, ty_);
+        gfx_text(4, 50, 1, col::good, "down%d over%d act%d xy%d,%d w%d%s",
+                 down_, overPet_, touchActive_, tx_, ty_,
+                 (int)walk_.x(), !walk_.walking() ? "." : walk_.facingRight() ? ">" : "<");
         gfx_text(4, 62, 1, col::good, "prog%.0f/%d dist%.0f mv%.1f bat%.2fV",
                  rubProgress_, (int)PET_CHUNK_DIST, rubDist_, lastMove_, BAT_analogVolts);
         // exact care values live here now that the HUD shows coarse states

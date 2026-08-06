@@ -2,6 +2,7 @@
 #include "gamedata.hpp"
 #include "save.hpp"
 #include "pet.hpp"               // LifeStage
+#include "engine/pakfs.hpp"      // mounted mod packs are extra scan roots
 #include "esp_log.h"
 #include "cJSON.h"
 #include <dirent.h>
@@ -241,10 +242,18 @@ void PersonalityRegistry::loadAll()
     char dir[64];
     snprintf(dir, sizeof dir, "%s/natures", GAMEDATA_ROOT);
     scanNatures(dir, "flash");
-    scanNatures(SD_NATURES, "sd");
+    for (int i = 0; i < pakfs_count(); i++) {          // mod packs (later pak wins)
+        snprintf(dir, sizeof dir, "%s/natures", pakfs_root(i));
+        scanNatures(dir, "pak");
+    }
+    scanNatures(SD_NATURES, "sd");                     // loose files: the final overlay
 
     snprintf(dir, sizeof dir, "%s/personalities", GAMEDATA_ROOT);
     scanTraits(dir, "flash");
+    for (int i = 0; i < pakfs_count(); i++) {
+        snprintf(dir, sizeof dir, "%s/personalities", pakfs_root(i));
+        scanTraits(dir, "pak");
+    }
     scanTraits(SD_TRAITS, "sd");
 
     if (natures_ == 0 || traits_ == 0) { natures_ = traits_ = 0; addBuiltins(); }

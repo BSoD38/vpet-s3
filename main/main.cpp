@@ -1,5 +1,6 @@
 #include "engine/display.hpp"   // C++ (LovyanGFX)
 #include "engine/power.hpp"     // sleep/power boot-path helpers
+#include "engine/sdwatch.hpp"   // mid-session SD card yank/insert watcher
 #include "core/game.hpp"
 #include "sim/save.hpp"
 #include "esp_log.h"
@@ -70,6 +71,7 @@ extern "C" void app_main(void)
 
     Driver_Init();                // PWR latch/key, battery, IMU, flash search, sensor task
     SD_Init();
+    sdwatch_start();              // baseline = SD_Init's outcome; game loop halts on change
     Audio_Init();
 
     Display_Init();   // LovyanGFX: SPI + ST7789 panel, cleared to black

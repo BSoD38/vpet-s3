@@ -1,0 +1,103 @@
+{
+  "notes": [
+    "DMC V2 (Digital Monster Color Ver.2) roster, built as an SD-CARD MOD rather than flash",
+    "content -- it exists to exercise the modding overlay end to end.",
+    "None of these ids collide with the V1 roster in flash_creatures/, so the whole pack is",
+    "ADDITIVE: on device the registry should report 23 + 9 creatures.",
+    "whamon evolves into 'mamemon', which lives in FLASH -- a deliberate cross-root edge, to",
+    "prove edges resolve against the merged registry rather than one root. The importer will",
+    "warn that the target isn't in the output dir; that warning is expected here.",
+    "Stats/needs/tiers follow the same scale as the V1 entries (child ~100hp, adult ~260,",
+    "perfect ~520) so an SD creature is balanced against a flash one."
+  ],
+  "spriteRoot": "D:/T\u00e9l\u00e9chargements/drive-download-20260805T192802Z-1-001/DMC Rosters (PLEASE SEE READ ME)/DMC V2 (Official) Roster/Individual Sprites",
+  "creatures": [
+    {
+      "id": "punimon", "name": "Punimon", "source": "Punimon",
+      "tier": 1, "attribute": "free",
+      "base": { "hp": 25, "str": 3, "end": 4, "agi": 3, "int": 3 },
+      "needs": { "hungerPerHr": 8, "happyPerHr": 10, "poopIntervalS": 7200, "sleepStart": 20, "sleepEnd": 7 },
+      "minStageSecs": 3600,
+      "evolutions": [ { "to": "tsunomon" } ]
+    },
+    {
+      "id": "tsunomon", "name": "Tsunomon", "source": "Tsunomon",
+      "tier": 2, "attribute": "free",
+      "base": { "hp": 45, "str": 5, "end": 6, "agi": 5, "int": 5 },
+      "needs": { "hungerPerHr": 10, "happyPerHr": 12, "poopIntervalS": 9000, "sleepStart": 21, "sleepEnd": 7 },
+      "minStageSecs": 43200,
+      "evolutions": [
+        { "to": "gabumon", "maxCareMistakes": 3 },
+        { "to": "elecmon" }
+      ]
+    },
+    {
+      "id": "gabumon", "name": "Gabumon", "source": "Gabumon",
+      "tier": 3, "attribute": "vaccine",
+      "base": { "hp": 100, "str": 11, "end": 10, "agi": 10, "int": 9 },
+      "needs": { "hungerPerHr": 12, "happyPerHr": 13, "poopIntervalS": 9000, "sleepStart": 21, "sleepEnd": 6 },
+      "minStageSecs": 172800,
+      "evolutions": [
+        { "to": "angemon",      "maxCareMistakes": 2, "minStr": 120 },
+        { "to": "birdramon",    "minAgi": 60 },
+        { "to": "kabuterimon",  "minStr": 25 },
+        { "to": "whamon" }
+      ]
+    },
+    {
+      "id": "elecmon", "name": "Elecmon", "source": "Elecmon",
+      "tier": 3, "attribute": "data",
+      "base": { "hp": 95, "str": 10, "end": 9, "agi": 12, "int": 9 },
+      "needs": { "hungerPerHr": 12, "happyPerHr": 12, "poopIntervalS": 9000, "sleepStart": 20, "sleepEnd": 7 },
+      "minStageSecs": 172800,
+      "evolutions": [
+        { "to": "kabuterimon", "maxCareMistakes": 3, "minStr": 60 },
+        { "to": "birdramon",   "minAgi": 40 },
+        { "to": "whamon" }
+      ]
+    },
+    {
+      "id": "birdramon", "name": "Birdramon", "source": "Birdramon",
+      "tier": 4, "attribute": "data",
+      "base": { "hp": 250, "str": 27, "end": 20, "agi": 26, "int": 18 },
+      "needs": { "hungerPerHr": 14, "happyPerHr": 12, "poopIntervalS": 10800, "sleepStart": 22, "sleepEnd": 6 },
+      "minStageSecs": 259200,
+      "evolutions": [ { "to": "metalmamemon", "minWins": 15 } ]
+    },
+    {
+      "id": "kabuterimon", "name": "Kabuterimon", "source": "Kabuterimon",
+      "tier": 4, "attribute": "vaccine",
+      "base": { "hp": 265, "str": 30, "end": 26, "agi": 16, "int": 18 },
+      "needs": { "hungerPerHr": 14, "happyPerHr": 12, "poopIntervalS": 10800, "sleepStart": 22, "sleepEnd": 6 },
+      "minStageSecs": 259200,
+      "evolutions": [ { "to": "metalmamemon", "minWins": 15 } ]
+    },
+    {
+      "id": "angemon", "name": "Angemon", "source": "Angemon",
+      "tier": 4, "attribute": "vaccine",
+      "base": { "hp": 245, "str": 28, "end": 22, "agi": 22, "int": 30 },
+      "needs": { "hungerPerHr": 13, "happyPerHr": 13, "poopIntervalS": 10800, "sleepStart": 21, "sleepEnd": 6 },
+      "minStageSecs": 259200,
+      "evolutions": [ { "to": "metalmamemon", "minWins": 15 } ]
+    },
+    {
+      "id": "whamon", "name": "Whamon", "source": "Whamon",
+      "tier": 4, "attribute": "data",
+      "base": { "hp": 300, "str": 24, "end": 32, "agi": 12, "int": 18 },
+      "needs": { "hungerPerHr": 15, "happyPerHr": 11, "poopIntervalS": 10800, "sleepStart": 22, "sleepEnd": 6 },
+      "minStageSecs": 259200,
+      "evolutions": [
+        { "to": "metalmamemon", "minWins": 15 },
+        { "to": "mamemon" }
+      ]
+    },
+    {
+      "id": "metalmamemon", "name": "MetalMamemon", "source": "MetalMamemon",
+      "tier": 5, "attribute": "virus",
+      "base": { "hp": 500, "str": 52, "end": 46, "agi": 34, "int": 36 },
+      "needs": { "hungerPerHr": 15, "happyPerHr": 12, "poopIntervalS": 10800, "sleepStart": 22, "sleepEnd": 6 },
+      "minStageSecs": 345600,
+      "evolutions": []
+    }
+  ]
+}

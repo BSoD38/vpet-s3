@@ -1,0 +1,29 @@
+{
+  "name": "Greymon",
+  "tier": 4,
+  "attribute": "vaccine",
+  "base": {
+    "hp": 260,
+    "str": 30,
+    "end": 22,
+    "agi": 18,
+    "int": 16
+  },
+  "needs": {
+    "hungerPerHr": 14,
+    "happyPerHr": 12,
+    "poopIntervalS": 10800,
+    "sleepStart": 22,
+    "sleepEnd": 6
+  },
+  "minStageSecs": 259200,
+  "sprite": "sheet.png",
+  "frames": 16,
+  "evolutions": [
+    {
+      "to": "metalgreymon",
+      "minWins": 15
+    }
+  ],
+  "id": "greymon"
+}

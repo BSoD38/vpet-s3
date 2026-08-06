@@ -1,0 +1,29 @@
+{
+  "name": "Numemon",
+  "tier": 4,
+  "attribute": "virus",
+  "base": {
+    "hp": 180,
+    "str": 14,
+    "end": 12,
+    "agi": 14,
+    "int": 10
+  },
+  "needs": {
+    "hungerPerHr": 10,
+    "happyPerHr": 14,
+    "poopIntervalS": 5400,
+    "sleepStart": 23,
+    "sleepEnd": 8
+  },
+  "minStageSecs": 259200,
+  "sprite": "sheet.png",
+  "frames": 16,
+  "evolutions": [
+    {
+      "to": "monzaemon",
+      "minWins": 15
+    }
+  ],
+  "id": "numemon"
+}

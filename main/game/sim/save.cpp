@@ -3,6 +3,7 @@
 #include "nvs_flash.h"
 #include "nvs.h"
 #include "esp_log.h"
+#include "esp_system.h"   // esp_restart (factoryReset)
 
 static const char* TAG = "SAVE";
 static const char* NS  = "pet";
@@ -148,4 +149,12 @@ void SaveStore::storeStr(const char* key, const char* v) const
     if (!acquire(h)) return;
     nvs_set_str((nvs_handle_t)h, key, v);
     release(h);
+}
+
+void SaveStore::factoryReset() const
+{
+    ESP_LOGW(TAG, "FACTORY RESET: erasing NVS and restarting");
+    nvs_flash_deinit();     // release the partition so erase can't race an open handle
+    nvs_flash_erase();
+    esp_restart();
 }

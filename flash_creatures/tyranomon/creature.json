@@ -1,0 +1,29 @@
+{
+  "name": "Tyranomon",
+  "tier": 4,
+  "attribute": "data",
+  "base": {
+    "hp": 240,
+    "str": 26,
+    "end": 20,
+    "agi": 16,
+    "int": 14
+  },
+  "needs": {
+    "hungerPerHr": 14,
+    "happyPerHr": 12,
+    "poopIntervalS": 10800,
+    "sleepStart": 21,
+    "sleepEnd": 6
+  },
+  "minStageSecs": 259200,
+  "sprite": "sheet.png",
+  "frames": 16,
+  "evolutions": [
+    {
+      "to": "mamemon",
+      "minWins": 15
+    }
+  ],
+  "id": "tyranomon"
+}

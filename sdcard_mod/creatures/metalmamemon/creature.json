@@ -1,0 +1,24 @@
+{
+  "name": "MetalMamemon",
+  "tier": 5,
+  "attribute": "virus",
+  "base": {
+    "hp": 500,
+    "str": 52,
+    "end": 46,
+    "agi": 34,
+    "int": 36
+  },
+  "needs": {
+    "hungerPerHr": 15,
+    "happyPerHr": 12,
+    "poopIntervalS": 10800,
+    "sleepStart": 22,
+    "sleepEnd": 6
+  },
+  "minStageSecs": 345600,
+  "sprite": "sheet.png",
+  "frames": 16,
+  "evolutions": [],
+  "id": "metalmamemon"
+}

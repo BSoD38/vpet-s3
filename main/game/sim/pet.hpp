@@ -141,6 +141,7 @@ class Pet {
     int       idx_ = -1;          // resolved registry index of the current creature
     char      nickname_[PET_NICK_MAX + 1] = {0};   // player-set name (empty = use species name)
     bool      refused_ = false;   // set when an action is refused; UI consumes it for a "no" wiggle
+    bool      ate_     = false;   // set when food was actually eaten; UI consumes it for the eat animation
     // Daily bond allowance (see BondSource). Kept OUT of PetState -- and so out of the
     // versioned blob -- in its own NVS keys, flushed by markSaved(). The window is a
     // rolling 24h anchored at the last refill (see addFriendship for why not a day index).
@@ -184,6 +185,18 @@ public:
     void        setMood(PetMood m);          // RAM only; the caller's markSaved persists it
     void        mendMood(int amount);        // care progress; softens a step when it fills
 
+    // Does a save exist whose species is NOT in the current registry? Then booting would
+    // rewrite the creature as an egg and persist that immediately (boot() ends in markSaved),
+    // losing a pet the player could still get back by putting the data in place -- typically
+    // the SD card it came from, or an uninstalled mod pack. Call BEFORE boot() so the player
+    // can be asked instead; this only reads, and touches no state. Fills `idOut` with the
+    // missing species id for the message. See App::init.
+    bool savedSpeciesMissing(char* idOut, int n);
+    // The player has chosen to give up on that creature. Invalidates the stored blob so the
+    // next boot() takes its ordinary "no save" path -- newEgg() plus the fresh-start resets
+    // (mood, bond allowance, idle clock) -- instead of this needing its own copy of them.
+    void forgetSave();
+
     void boot();                  // seed RTC, load save + offline catch-up, else new egg
     void tick(float dt);          // advance sim by dt SIM-seconds (caller applies gameSpeed)
     // Feed a specific food. Which food is chosen is the player's main day-to-day way of
@@ -201,6 +214,7 @@ public:
     void markSaved();             // stamp lastUpdate = now and persist
     void setGameSpeed(uint16_t mult);
     bool checkRefused();          // true once if an action was just refused
+    bool checkAte();              // true once if food was just eaten (drives the eat animation)
 
     // --- stats / friendship (flat growth; callers persist via markSaved) ---
     void     trainStat(StatId id, uint32_t amount);  // add to the trained modifier (clamped so base+mod<=cap)

@@ -12,6 +12,9 @@ idf_component_register(
                               "./game/engine/input.cpp"
                               "./game/engine/clock.cpp"
                               "./game/engine/power.cpp"
+                              "./game/engine/fw_update.cpp"
+                              "./game/engine/pakfs.cpp"
+                              "./game/engine/sdwatch.cpp"
 
                               # game: sim (simulation state + persistence)
                               "./game/sim/pet.cpp"
@@ -41,6 +44,7 @@ idf_component_register(
                               "./game/scenes/menus/scene_activities.cpp"
                               "./game/scenes/menus/scene_menu.cpp"
                               "./game/scenes/menus/scene_settings.cpp"
+                              "./game/scenes/menus/scene_update.cpp"
                               "./game/scenes/menus/scene_cheats.cpp"
                               "./game/scenes/menus/scene_timeset.cpp"
                               "./game/scenes/menus/scene_stats.cpp"
@@ -89,12 +93,46 @@ target_compile_options(${COMPONENT_LIB} PRIVATE
     -Wno-error=format-truncation
 )
 
-# Pack the base-game creature roster (flash_creatures/<id>/creature.json + sprite.png)
-# into a read-only FAT image and flash it to the `creatures` partition. Mounted at
-# /creatures on the device; SD-card creatures overlay it at runtime (SD wins on id clash).
-fatfs_create_rawflash_image(creatures "${CMAKE_CURRENT_SOURCE_DIR}/../flash_creatures" FLASH_IN_PROJECT)
+# --- Base-game data: one mod pack, not loose files ---------------------------------------
+#
+# All read-only base data (creatures, foods, natures, personalities, conversations) ships as a
+# single base.pak inside the `gamedata` partition, which the device mounts as a pak root at
+# boot. A pack holds its table of contents in PSRAM, so the whole data set costs one FAT open
+# instead of a directory walk per file (~7-12 ms each here), and lazy sprite loads become a
+# seek -- see docs/modpacks.md.
+#
+# flash_creatures/ and flash_gamedata/ REMAIN the tracked, diffable sources; authoring does not
+# change. make_paks.py stages them into the pack's mod-root layout, which the two partition
+# roots did not share (flash_creatures/<id>/ needs a `creatures/` prefix it has no reason to
+# have on disk, while flash_gamedata/<system>/ is already at the right depth).
+idf_build_get_property(fatfs_pin_python PYTHON)
+set(BASE_PAK_DIR "${CMAKE_BINARY_DIR}/flash_data")
+set(MAKE_PAKS    "${CMAKE_CURRENT_SOURCE_DIR}/../tools/make_paks.py")
 
-# Shared read-only game data (foods now, conversations next), packed from flash_gamedata/
-# into the `gamedata` partition and mounted at /gamedata. One partition for all
-# data-driven systems rather than one per feature -- see docs/food-and-feeding.md.
-fatfs_create_rawflash_image(gamedata "${CMAKE_CURRENT_SOURCE_DIR}/../flash_gamedata" FLASH_IN_PROJECT)
+# Once at CONFIGURE time, because fatfs_create_rawflash_image() below needs the image
+# directory to exist and be populated...
+execute_process(COMMAND ${fatfs_pin_python} ${MAKE_PAKS} ${BASE_PAK_DIR} base.pak
+                RESULT_VARIABLE base_pak_result)
+if(NOT base_pak_result EQUAL 0)
+    message(FATAL_ERROR "tools/make_paks.py failed to build base.pak (${base_pak_result})")
+endif()
+
+# ...and again on every build, so editing a creature.json or a sprite actually reaches the
+# device. Repacking is unconditional but cheap, and the pack is byte-deterministic (modpack.py
+# sorts by path and stores no timestamps), so an unchanged source tree still yields an identical
+# image -- which is what keeps the update system able to skip unchanged data partitions.
+add_custom_target(base_pak ALL
+    COMMAND ${fatfs_pin_python} ${MAKE_PAKS} ${BASE_PAK_DIR} base.pak
+    COMMENT "Packing base game data -> flash_data/base.pak"
+    VERBATIM)
+
+fatfs_create_rawflash_image(gamedata "${BASE_PAK_DIR}" FLASH_IN_PROJECT)
+add_dependencies(fatfs_gamedata_bin base_pak)   # repack before imaging, not after
+
+# fatfsgen embeds a RANDOM volume id per run, making identical content hash differently;
+# pin it so the SD-update system's "skip unchanged data partitions" comparison works
+# (docs/firmware-updates.md). Runs after each (unconditional) image regeneration.
+add_custom_command(TARGET fatfs_gamedata_bin POST_BUILD
+    COMMAND ${fatfs_pin_python} ${CMAKE_CURRENT_SOURCE_DIR}/../tools/pin_fatfs_volid.py
+            ${CMAKE_BINARY_DIR}/gamedata.bin
+    COMMENT "Pinning FAT volume id of gamedata.bin")

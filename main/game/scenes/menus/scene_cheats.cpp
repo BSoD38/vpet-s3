@@ -4,6 +4,7 @@
 #include "ui/widgets.hpp"
 #include "sim/creatures.hpp"
 #include <cstring>
+#include <strings.h> // strcasecmp (picker sort)
 #include <cstdio>    // snprintf (species label)
 
 // ---- layout -----------------------------------------------------------------------------
@@ -22,11 +23,14 @@ static int  stat_row_y(int i) { return STAT_Y0 + i * STAT_PITCH; }
 static Rect stat_minus(int i) { return { MINUS_X, stat_row_y(i), SBW, STAT_BH }; }
 static Rect stat_plus (int i) { return { PLUS_X,  stat_row_y(i), SBW, STAT_BH }; }
 
-// max/zero + species cycler
+// max/zero + the species button (tapping it opens the scrolling picker)
 static const Rect MAX_BTN  { 16,  236, 100, 24 };
 static const Rect ZERO_BTN { 124, 236, 100, 24 };
-static const Rect SP_PREV  { 16,         268, 30, 28 };
-static const Rect SP_NEXT  { GAME_W - 46, 268, 30, 28 };
+static const Rect SP_BTN   { 16,  268, GAME_W - 32, 28 };
+
+// picker: single-line rows, so a 200-slot modded roster is a couple of flicks tall
+static const int PICK_Y     = 52;
+static const int PICK_ROW_H = 36;
 
 struct StatRow { StatId id; const char* label; int step; };
 static const StatRow SROWS[] = {
@@ -38,8 +42,27 @@ static const StatRow SROWS[] = {
 };
 static const int SROW_N = (int)(sizeof(SROWS) / sizeof(SROWS[0]));
 
+// Picker order: evolution stage first, then name (case-insensitive; ids break a name tie
+// so two same-named modded creatures still sort deterministically).
+static bool species_before(const CreatureRegistry& reg, int a, int b)
+{
+    const Creature& ca = reg.at(a);
+    const Creature& cb = reg.at(b);
+    if (ca.tier != cb.tier) return ca.tier < cb.tier;
+    int c = strcasecmp(ca.name, cb.name);
+    if (c != 0) return c < 0;
+    return strcmp(ca.id, cb.id) < 0;
+}
+
+void SceneCheats::onEnter()
+{
+    picking_ = false;   // never re-enter the scene with the picker still open
+}
+
 void SceneCheats::render()
 {
+    if (picking_) { renderPicker(); return; }
+
     Pet& pet = app().pet;
     fb.fillScreen(col::panel);
     gfx_text(16, 12, 2, col::accent, "Cheats");
@@ -64,18 +87,68 @@ void SceneCheats::render()
     MAX_BTN.button ("MAX STATS",  rgb565(120, 90, 150), col::white, 1);
     ZERO_BTN.button("ZERO STATS", rgb565(90, 70, 80),   col::white, 1);
 
-    // --- species cycler ---
-    SP_PREV.button("<", col::accent, col::black, 2);
-    SP_NEXT.button(">", col::accent, col::black, 2);
+    // --- species (opens the picker) ---
     const Creature& c = app().creatures.at(pet.creatureIndex());
-    char sp[40];
+    char sp[48];
     snprintf(sp, sizeof sp, "%s (T%u)", c.name, (unsigned)c.tier);
-    int tw = (int)strlen(sp) * 6;
-    gfx_text((GAME_W - tw) / 2, SP_PREV.y + (SP_PREV.h - 8) / 2, 1, col::white, "%s", sp);
+    SP_BTN.button(sp, col::card, col::white, 1);
+    SP_BTN.outline(col::accent);
+}
+
+void SceneCheats::renderPicker()
+{
+    const CreatureRegistry& reg = app().creatures;
+    const int n   = reg.count();
+    const int cur = app().pet.creatureIndex();
+
+    fb.fillScreen(col::panel);
+    gfx_text(16, 18, 2, col::accent, "Species");
+    draw_back();
+
+    // Text-only rows on purpose: decoding a sprite per visible row would churn the
+    // 16-entry LRU sprite cache on every flick and stutter the scroll.
+    list_.beginClip();
+    for (int i = list_.first(); i <= list_.last(n); i++) {
+        const Creature& c = reg.at(order_[i]);
+        const bool isCur  = order_[i] == cur;
+        Rect row  = list_.rowRect(i);
+        Rect card { 12, row.y + 2, GAME_W - 24, PICK_ROW_H - 4 };
+        card.fill(col::card);
+        card.outline(isCur ? col::accent : col::dim);
+
+        // Right-aligned tier + attribute tag; the name gets whatever width is left.
+        char tag[16];
+        snprintf(tag, sizeof tag, "T%u %s", (unsigned)c.tier, attr_short(c.attribute));
+        int tagX = card.x + card.w - (int)strlen(tag) * 6 - 8;
+        gfx_text(tagX, row.y + (PICK_ROW_H - 8) / 2, 1, attr_color(c.attribute), "%s", tag);
+        gfx_text_fit(card.x + 8, row.y + (PICK_ROW_H - 16) / 2, tagX - card.x - 16, 2,
+                     isCur ? col::accent : col::white, "%s", c.name);
+    }
+    list_.endClip();
+    list_.drawScrollbar(n);
+}
+
+void SceneCheats::inputPicker(const Input& in)
+{
+    // Back sits above the viewport, so a scroll gesture can never swallow it.
+    if (in.pressed && kBack.contains(in)) { picking_ = false; return; }
+
+    const int n = app().creatures.count();
+    list_.update(in, n);
+
+    int row = list_.tapped();
+    if (row >= 0 && row < n) {
+        app().pet.cheatSetSpecies(order_[row]);
+        picking_ = false;           // morph and return, one gesture
+    }
 }
 
 void SceneCheats::onInput(const Input& in)
 {
+    // The picker needs the full press/drag/release stream (scroll gestures), so it
+    // branches off before the pressed-only gate below.
+    if (picking_) { inputPicker(in); return; }
+
     if (!in.pressed) return;
     Pet& pet = app().pet;
 
@@ -105,11 +178,35 @@ void SceneCheats::onInput(const Input& in)
         return;
     }
 
-    // species cycler (wraps)
-    int n = app().creatures.count();
-    if (n > 0) {
-        int cur = pet.creatureIndex();
-        if (SP_PREV.contains(in)) { pet.cheatSetSpecies((cur - 1 + n) % n); return; }
-        if (SP_NEXT.contains(in)) { pet.cheatSetSpecies((cur + 1) % n);     return; }
+    // open the species picker, scrolled so the CURRENT species starts mid-view (with a
+    // long modded roster, "where am I" matters more than "what's first in the order").
+    if (SP_BTN.contains(in)) {
+        const CreatureRegistry& reg = app().creatures;
+        const int n = reg.count();
+
+        // Sorted on every open, not once: cheap (n <= 200, a handful of ms at worst)
+        // and immune to ever going stale against a future registry reload.
+        for (int i = 0; i < n; i++) order_[i] = (int16_t)i;
+        for (int i = 1; i < n; i++) {                       // insertion sort
+            int16_t v = order_[i];
+            int j = i;
+            while (j > 0 && species_before(reg, v, order_[j - 1])) {
+                order_[j] = order_[j - 1];
+                j--;
+            }
+            order_[j] = v;
+        }
+
+        int pos = 0;                                        // display row of the current species
+        for (int i = 0; i < n; i++)
+            if (order_[i] == pet.creatureIndex()) { pos = i; break; }
+
+        list_.geom(0, PICK_Y, GAME_W, GAME_H - PICK_Y - 6, PICK_ROW_H);
+        list_.reset();
+        float want = (float)(pos * PICK_ROW_H) - (float)(list_.h - PICK_ROW_H) / 2;
+        float m    = list_.maxScroll(n);
+        list_.scroll = want < 0 ? 0 : (want > m ? m : want);
+        picking_ = true;
+        return;
     }
 }

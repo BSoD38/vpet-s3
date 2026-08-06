@@ -1,0 +1,157 @@
+{
+  "notes": [
+    "DMC V1 (Digital Monster Color Ver.1) official roster, evolution tree per Wikimon.",
+    "Original requirements -> game fields: 'calls' (care mistakes) -> maxCareMistakes;",
+    "training counts -> minStr/minAgi thresholds on the TRAINED stat (mod resets on evolve,",
+    "same scale as sparky->boltor minAgi 120); '15+ battles, 80%+ wins' -> minWins 15.",
+    "Sleep-disturbance / overfeed branches (Airdramon/Seadramon split) are approximated",
+    "with stat gates. Edges are checked TOP-DOWN, first qualifying wins; last is fallback.",
+    "Stats/needs are tuning knobs scaled against the placeholder tiers (sparky/boltor)."
+  ],
+  "spriteRoot": "D:/T\u00e9l\u00e9chargements/drive-download-20260805T192802Z-1-001/DMC Rosters (PLEASE SEE READ ME)/DMC V1 (Official) Roster/Individual Sprites",
+  "creatures": [
+    {
+      "id": "botamon", "name": "Botamon", "source": "Botamon",
+      "tier": 1, "attribute": "free",
+      "base": { "hp": 25, "str": 3, "end": 3, "agi": 4, "int": 3 },
+      "needs": { "hungerPerHr": 8, "happyPerHr": 10, "poopIntervalS": 7200, "sleepStart": 20, "sleepEnd": 7 },
+      "minStageSecs": 3600,
+      "evolutions": [ { "to": "koromon" } ]
+    },
+    {
+      "id": "koromon", "name": "Koromon", "source": "Koromon",
+      "tier": 2, "attribute": "free",
+      "base": { "hp": 45, "str": 5, "end": 5, "agi": 6, "int": 5 },
+      "needs": { "hungerPerHr": 10, "happyPerHr": 12, "poopIntervalS": 9000, "sleepStart": 21, "sleepEnd": 7 },
+      "minStageSecs": 43200,
+      "evolutions": [
+        { "to": "agumon", "maxCareMistakes": 3 },
+        { "to": "betamon" }
+      ]
+    },
+    {
+      "id": "agumon", "name": "Agumon", "source": "Agumon",
+      "tier": 3, "attribute": "vaccine",
+      "base": { "hp": 100, "str": 12, "end": 9, "agi": 10, "int": 8 },
+      "needs": { "hungerPerHr": 12, "happyPerHr": 13, "poopIntervalS": 9000, "sleepStart": 21, "sleepEnd": 6 },
+      "minStageSecs": 172800,
+      "evolutions": [
+        { "to": "greymon",   "maxCareMistakes": 3, "minStr": 120 },
+        { "to": "devimon",   "maxCareMistakes": 3 },
+        { "to": "meramon",   "minStr": 60 },
+        { "to": "tyranomon", "minStr": 25 },
+        { "to": "numemon" }
+      ]
+    },
+    {
+      "id": "betamon", "name": "Betamon", "source": "Betamon",
+      "tier": 3, "attribute": "virus",
+      "base": { "hp": 95, "str": 9, "end": 11, "agi": 8, "int": 10 },
+      "needs": { "hungerPerHr": 12, "happyPerHr": 12, "poopIntervalS": 9000, "sleepStart": 20, "sleepEnd": 7 },
+      "minStageSecs": 172800,
+      "evolutions": [
+        { "to": "devimon",   "maxCareMistakes": 3, "minStr": 150 },
+        { "to": "meramon",   "maxCareMistakes": 3 },
+        { "to": "airdramon", "minAgi": 60 },
+        { "to": "seadramon", "minStr": 60 },
+        { "to": "numemon" }
+      ]
+    },
+    {
+      "id": "greymon", "name": "Greymon", "source": "Greymon",
+      "tier": 4, "attribute": "vaccine",
+      "base": { "hp": 260, "str": 30, "end": 22, "agi": 18, "int": 16 },
+      "needs": { "hungerPerHr": 14, "happyPerHr": 12, "poopIntervalS": 10800, "sleepStart": 22, "sleepEnd": 6 },
+      "minStageSecs": 259200,
+      "evolutions": [ { "to": "metalgreymon", "minWins": 15 } ]
+    },
+    {
+      "id": "devimon", "name": "Devimon", "source": "Devimon",
+      "tier": 4, "attribute": "virus",
+      "base": { "hp": 230, "str": 24, "end": 16, "agi": 26, "int": 24 },
+      "needs": { "hungerPerHr": 13, "happyPerHr": 11, "poopIntervalS": 10800, "sleepStart": 1, "sleepEnd": 9 },
+      "minStageSecs": 259200,
+      "evolutions": [ { "to": "metalgreymon", "minWins": 15 } ]
+    },
+    {
+      "id": "airdramon", "name": "Airdramon", "source": "Airdramon",
+      "tier": 4, "attribute": "vaccine",
+      "base": { "hp": 220, "str": 22, "end": 14, "agi": 34, "int": 20 },
+      "needs": { "hungerPerHr": 13, "happyPerHr": 12, "poopIntervalS": 10800, "sleepStart": 22, "sleepEnd": 6 },
+      "minStageSecs": 259200,
+      "evolutions": [ { "to": "metalgreymon", "minWins": 15 } ]
+    },
+    {
+      "id": "tyranomon", "name": "Tyranomon", "source": "Tyrannomon",
+      "tier": 4, "attribute": "data",
+      "base": { "hp": 240, "str": 26, "end": 20, "agi": 16, "int": 14 },
+      "needs": { "hungerPerHr": 14, "happyPerHr": 12, "poopIntervalS": 10800, "sleepStart": 21, "sleepEnd": 6 },
+      "minStageSecs": 259200,
+      "evolutions": [ { "to": "mamemon", "minWins": 15 } ]
+    },
+    {
+      "id": "meramon", "name": "Meramon", "source": "Meramon",
+      "tier": 4, "attribute": "data",
+      "base": { "hp": 225, "str": 28, "end": 15, "agi": 22, "int": 18 },
+      "needs": { "hungerPerHr": 13, "happyPerHr": 12, "poopIntervalS": 10800, "sleepStart": 22, "sleepEnd": 6 },
+      "minStageSecs": 259200,
+      "evolutions": [ { "to": "mamemon", "minWins": 15 } ]
+    },
+    {
+      "id": "seadramon", "name": "Seadramon", "source": "Seadramon",
+      "tier": 4, "attribute": "data",
+      "base": { "hp": 235, "str": 23, "end": 18, "agi": 24, "int": 16 },
+      "needs": { "hungerPerHr": 13, "happyPerHr": 12, "poopIntervalS": 10800, "sleepStart": 22, "sleepEnd": 6 },
+      "minStageSecs": 259200,
+      "evolutions": [ { "to": "mamemon", "minWins": 15 } ]
+    },
+    {
+      "id": "numemon", "name": "Numemon", "source": "Numemon",
+      "tier": 4, "attribute": "virus",
+      "base": { "hp": 180, "str": 14, "end": 12, "agi": 14, "int": 10 },
+      "needs": { "hungerPerHr": 10, "happyPerHr": 14, "poopIntervalS": 5400, "sleepStart": 23, "sleepEnd": 8 },
+      "minStageSecs": 259200,
+      "evolutions": [ { "to": "monzaemon", "minWins": 15 } ]
+    },
+    {
+      "id": "metalgreymon", "name": "MetalGreymon", "source": "MetalGreymon",
+      "tier": 5, "attribute": "virus",
+      "base": { "hp": 520, "str": 55, "end": 42, "agi": 30, "int": 32 },
+      "needs": { "hungerPerHr": 15, "happyPerHr": 12, "poopIntervalS": 10800, "sleepStart": 22, "sleepEnd": 6 },
+      "minStageSecs": 345600,
+      "evolutions": [ { "to": "blitzgreymon", "minWins": 40 } ]
+    },
+    {
+      "id": "mamemon", "name": "Mamemon", "source": "Mamemon",
+      "tier": 5, "attribute": "data",
+      "base": { "hp": 420, "str": 60, "end": 30, "agi": 45, "int": 35 },
+      "needs": { "hungerPerHr": 15, "happyPerHr": 12, "poopIntervalS": 10800, "sleepStart": 21, "sleepEnd": 7 },
+      "minStageSecs": 1000000000,
+      "evolutions": []
+    },
+    {
+      "id": "monzaemon", "name": "Monzaemon", "source": "Monzaemon",
+      "tier": 5, "attribute": "vaccine",
+      "base": { "hp": 550, "str": 45, "end": 50, "agi": 22, "int": 30 },
+      "needs": { "hungerPerHr": 15, "happyPerHr": 13, "poopIntervalS": 10800, "sleepStart": 21, "sleepEnd": 7 },
+      "minStageSecs": 345600,
+      "evolutions": [ { "to": "shinmonzaemon", "minWins": 40 } ]
+    },
+    {
+      "id": "blitzgreymon", "name": "BlitzGreymon", "source": "BlitzGreymon",
+      "tier": 6, "attribute": "virus",
+      "base": { "hp": 900, "str": 95, "end": 70, "agi": 60, "int": 65 },
+      "needs": { "hungerPerHr": 16, "happyPerHr": 10, "poopIntervalS": 14400, "sleepStart": 23, "sleepEnd": 6 },
+      "minStageSecs": 1000000000,
+      "evolutions": []
+    },
+    {
+      "id": "shinmonzaemon", "name": "ShinMonzaemon", "source": "ShinMonzaemon",
+      "tier": 6, "attribute": "vaccine",
+      "base": { "hp": 950, "str": 80, "end": 90, "agi": 45, "int": 60 },
+      "needs": { "hungerPerHr": 16, "happyPerHr": 10, "poopIntervalS": 14400, "sleepStart": 22, "sleepEnd": 7 },
+      "minStageSecs": 1000000000,
+      "evolutions": []
+    }
+  ]
+}

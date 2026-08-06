@@ -1,6 +1,7 @@
 #include "scene_settings.hpp"
 #include "core/app.hpp"
 #include "engine/gfx.hpp"
+#include "engine/fw_update.hpp"   // fw_current_version (footer)
 #include "ui/tabs.hpp"
 #include "ui/widgets.hpp"
 #include <cstring>
@@ -19,7 +20,13 @@ static const int GRID_X0 = 7, GRID_Y = 140, BTN_W = 52, BTN_H = 38, BTN_GX = 6, 
 
 // SYSTEM page: full-width rows
 static const int ROW_X = 16, ROW_W = GAME_W - 32, ROW_H = 34;
-static const int DBG_Y = 96, TIME_Y = 138, CHEAT_Y = 180;
+static const int DBG_Y = 96, TIME_Y = 138, CHEAT_Y = 180, UPD_Y = 222, RESET_Y = 264;
+
+// Factory-reset confirm page: the erase button must be HELD for HOLD_S seconds (a tap,
+// however unlucky, can't wipe a save). Progress resets the moment the finger leaves.
+static const float HOLD_S = 3.0f;
+static const Rect  kHold  { 30, 196, GAME_W - 60, 52 };
+static const Rect  kCancel{ 30, 266, GAME_W - 60, 40 };
 
 static Rect speed_btn(int i)
 {
@@ -30,7 +37,25 @@ static Rect speed_btn(int i)
 // SYSTEM page rows share x/width/height; only the y differs.
 static Rect sys_row(int y) { return { ROW_X, y, ROW_W, ROW_H }; }
 
-void SceneSettings::onEnter() { page_ = 0; }   // always open on the Game tab
+void SceneSettings::onEnter()
+{
+    page_ = 0;                 // always open on the Game tab
+    confirmReset_ = false;
+    holdT_ = 0.0f;
+}
+
+// Hold-to-erase progress. Runs only on the confirm page; leaving the button (or lifting)
+// starts over. Reaching the threshold erases NVS and restarts -- factoryReset() never returns.
+void SceneSettings::update(float dt)
+{
+    if (!confirmReset_) return;
+    if (down_ && kHold.contains(tx_, ty_)) {
+        holdT_ += dt;
+        if (holdT_ >= HOLD_S) app().save.factoryReset();
+    } else {
+        holdT_ = 0.0f;
+    }
+}
 
 static void render_game(App& app)
 {
@@ -59,11 +84,51 @@ static void render_system(App& app)
     gfx_text(ROW_X + 12, CHEAT_Y + 10, 2, col::white, "Cheats / Debug");
     gfx_text(ROW_X + ROW_W - 18, CHEAT_Y + 11, 2, col::white, ">");
 
-    gfx_text(16, 236, 1, col::dim, "Species: %s", app.pet.speciesName());
+    sys_row(UPD_Y).fill(rgb565(70, 130, 200));
+    gfx_text(ROW_X + 12, UPD_Y + 10, 2, col::white, "System Update");
+    gfx_text(ROW_X + ROW_W - 18, UPD_Y + 11, 2, col::white, ">");
+
+    sys_row(RESET_Y).fill(col::warn);
+    gfx_text(ROW_X + 12, RESET_Y + 10, 2, col::white, "Factory Reset");
+    gfx_text(ROW_X + ROW_W - 18, RESET_Y + 11, 2, col::white, ">");
+
+    gfx_text(16, 306, 1, col::dim, "FW v%s", fw_current_version());
+}
+
+// Confirmation page for the factory reset. Deliberately its own screen (not a small
+// modal): the player should read what they're about to lose, and the erase control is
+// a hold-to-confirm with a visible progress fill.
+static void render_confirm_reset(float holdT)
+{
+    fb.fillScreen(col::panel);
+    gfx_text(16, 16, 2, col::warn, "Factory Reset");
+    draw_back();
+
+    gfx_text_wrap(16, 64, GAME_W - 32, 1, col::white,
+                  "This erases EVERYTHING on the device:\n"
+                  "your pet, its stats and bond, journal,\n"
+                  "conversation memories, tower progress\n"
+                  "and settings.\n\n"
+                  "The game restarts with a new egg.\n"
+                  "This cannot be undone.", 3);
+
+    // Hold button: the fill grows with hold progress inside the button frame.
+    kHold.fill(rgb565(90, 24, 24));
+    float p = holdT / HOLD_S;
+    if (p > 1.0f) p = 1.0f;
+    if (p > 0.0f)
+        fb.fillRoundRect(kHold.x, kHold.y, (int)(kHold.w * p), kHold.h, 8, col::warn);
+    fb.drawRoundRect(kHold.x, kHold.y, kHold.w, kHold.h, 8, col::white);
+    gfx_text(kHold.x + 18, kHold.y + 12, 2, col::white, "HOLD TO ERASE");
+    gfx_text(kHold.x + 18, kHold.y + 34, 1, rgb565(255, 190, 180), "keep pressing for %d seconds", (int)HOLD_S);
+
+    kCancel.button("Cancel", col::accent, col::black);
 }
 
 void SceneSettings::render()
 {
+    if (confirmReset_) { render_confirm_reset(holdT_); return; }
+
     fb.fillScreen(col::panel);
     gfx_text(16, 16, 2, col::accent, "Settings");
 
@@ -77,7 +142,17 @@ void SceneSettings::render()
 
 void SceneSettings::onInput(const Input& in)
 {
+    down_ = in.down; tx_ = in.x; ty_ = in.y;   // live state for the hold-to-erase gesture
+
     if (!in.pressed) return;
+
+    if (confirmReset_) {                        // confirm page: only Cancel/Back leave it
+        if (kBack.contains(in) || kCancel.contains(in)) {
+            confirmReset_ = false;
+            holdT_ = 0.0f;
+        }
+        return;
+    }
 
     if (kBack.contains(in)) {
         app().setScene(SceneId::Menu, Slide::Back);
@@ -106,6 +181,15 @@ void SceneSettings::onInput(const Input& in)
         }
         if (sys_row(CHEAT_Y).contains(in)) {
             app().setScene(SceneId::Cheats, Slide::Forward);
+            return;
+        }
+        if (sys_row(UPD_Y).contains(in)) {
+            app().setScene(SceneId::Update, Slide::Forward);
+            return;
+        }
+        if (sys_row(RESET_Y).contains(in)) {
+            confirmReset_ = true;
+            holdT_ = 0.0f;
             return;
         }
     }

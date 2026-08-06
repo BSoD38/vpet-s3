@@ -1,0 +1,45 @@
+{
+  "name": "Betamon",
+  "tier": 3,
+  "attribute": "virus",
+  "base": {
+    "hp": 95,
+    "str": 9,
+    "end": 11,
+    "agi": 8,
+    "int": 10
+  },
+  "needs": {
+    "hungerPerHr": 12,
+    "happyPerHr": 12,
+    "poopIntervalS": 9000,
+    "sleepStart": 20,
+    "sleepEnd": 7
+  },
+  "minStageSecs": 172800,
+  "sprite": "sheet.png",
+  "frames": 16,
+  "evolutions": [
+    {
+      "to": "devimon",
+      "maxCareMistakes": 3,
+      "minStr": 150
+    },
+    {
+      "to": "meramon",
+      "maxCareMistakes": 3
+    },
+    {
+      "to": "airdramon",
+      "minAgi": 60
+    },
+    {
+      "to": "seadramon",
+      "minStr": 60
+    },
+    {
+      "to": "numemon"
+    }
+  ],
+  "id": "betamon"
+}

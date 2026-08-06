@@ -1,0 +1,29 @@
+{
+  "name": "Airdramon",
+  "tier": 4,
+  "attribute": "vaccine",
+  "base": {
+    "hp": 220,
+    "str": 22,
+    "end": 14,
+    "agi": 34,
+    "int": 20
+  },
+  "needs": {
+    "hungerPerHr": 13,
+    "happyPerHr": 12,
+    "poopIntervalS": 10800,
+    "sleepStart": 22,
+    "sleepEnd": 6
+  },
+  "minStageSecs": 259200,
+  "sprite": "sheet.png",
+  "frames": 16,
+  "evolutions": [
+    {
+      "to": "metalgreymon",
+      "minWins": 15
+    }
+  ],
+  "id": "airdramon"
+}

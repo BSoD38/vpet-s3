@@ -1,6 +1,8 @@
 #pragma once
 #include "core/scene.hpp"
 #include "ui/widgets.hpp"          // Rect (speech-bubble hit target)
+#include "engine/anim.hpp"         // CreatureAnim (sprite-frame state machine)
+#include "engine/walk.hpp"         // CreatureWalk (ground locomotion, step-locked)
 
 // Home / care screen: shows the pet, a HUD (stats + battery + clock), a MENU button,
 // and lets you pet the creature by rubbing a finger over it (raises happiness).
@@ -31,6 +33,9 @@ class SceneHome : public Scene {
     // Speech-bubble hit target. Computed in render() because it tracks the sprite's height;
     // zero-width when no conversation is waiting.
     Rect    bubble_{ 0, 0, 0, 0 };
+    CreatureAnim anim_;            // which sheet frame the pet is showing (16-frame creatures)
+    CreatureWalk walk_;            // where along the ground it is; travels in step with anim_
+                                   // (scene-lived, so it stays put across a menu round-trip)
 public:
     void update(float dt) override;
     void render() override;

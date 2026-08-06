@@ -20,6 +20,9 @@
   "sprite": "sprite.png",
   "evolutions": [
     {
+      "to": "botamon"
+    },
+    {
       "to": "nibbling"
     }
   ],
