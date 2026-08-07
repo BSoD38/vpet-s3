@@ -426,6 +426,12 @@ tappable bubble** beside it — it does *not* time out and vanish, so the payoff
 - Suppressed while asleep and during minigames/battle, following the existing
   `Scene::allowsSleep()` precedent.
 - Contextual pools fall out for free: sick, starving, and just-evolved dialogue.
+- **Nothing is offered below `CONV_MIN_STAGE` (= `STAGE_IN_TRAINING_2`).** An egg and the form it
+  first hatches into never talk, whatever the content says: speech is something the creature grows
+  into, and it arrives with the same stage that unlocks Activities. This is a floor in
+  `ConversationSystem::update()`, not a `minStage` gate per file, so it holds for mod content and
+  for the nature/trait pools (which gate on personality, not on stage). A file may still ask for a
+  later stage; `conv_lint.py` warns about one asking for an earlier one.
 
 ### 6.2 Journal
 

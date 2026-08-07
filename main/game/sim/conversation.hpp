@@ -106,6 +106,16 @@ struct ConvJournalEntry {
     uint32_t when;                    // RTC seconds when it was finished
 };
 
+// The creature can't talk at all below this life stage (LifeStage in sim/pet.hpp, so 2 =
+// STAGE_IN_TRAINING_2 -- an egg and the form it first hatches into stay silent). A hard floor
+// rather than a `minStage` gate on every file, for two reasons: content the game doesn't ship
+// (mods, and the nature/trait packs, which gate on personality and not on stage) would
+// otherwise put a full branching conversation in the mouth of something that hatched a minute
+// ago, and the floor has to hold whatever an author forgets. It is deliberately the SAME
+// threshold as Pet::activitiesUnlocked(): the newborn stages are the ones with no interactions
+// beyond basic care, and talking is an interaction. Content may still ask for more.
+constexpr uint8_t CONV_MIN_STAGE = 2;
+
 // Everything a gate is tested against, so the system stays decoupled from Pet.
 struct ConvContext {
     uint16_t    friendship;
@@ -220,6 +230,7 @@ private:
     int      jrnHead_  = 0;        // next write slot (ring)
 
     void beginScan();
+    void abortScan();         // drop a scan in flight (the stage floor, mid-scan)
     void stepScan(const ConvContext& ctx, int budget);
     bool openNextDir();
     static long cand_rank(const Cand& c);   // ONE ranking for eviction and selection

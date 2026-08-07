@@ -63,6 +63,16 @@ bool power_woke_from_timer()
 
 void power_service_timer_wake(SaveStore& save)
 {
+    // Care freeze: nothing can have changed and nothing will, so there is no catch-up to run
+    // and no threshold that could newly trip. Bail before the registry loads (~15 KB + file
+    // IO) and go straight back to sleep -- this mode exists precisely because the player is
+    // away for a long stretch, which is when these polls should be at their cheapest. The
+    // PWR key still wakes the device instantly (EXT1), so the freeze is never a lockout.
+    if (pet_frozen_saved(save)) {
+        ESP_LOGI(TAG, "timer wake: care frozen -> re-sleep");
+        power_enter_deep_sleep(POWER_DEEP_POLL_S);   // no return
+    }
+
     // Stage before catch-up, so we can spot an evolution that happened during sleep.
     PetState pre{};
     uint8_t oldStage = save.load(pre) ? pre.stage : 0;

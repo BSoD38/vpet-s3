@@ -45,6 +45,9 @@ void SceneStats::render()
     // docs/conversations-and-personality.md 2.8). HP and Energy keep exact bars -- they are
     // explicit game resources (battle gating, training costs) where precision is fairness.
     gfx_text(12, 78, 1, col::accent, "CARE");
+    // The sheet is where a returning player checks what state they left things in, so it has
+    // to say when the numbers below are frozen rather than merely unchanged.
+    if (pet.frozen()) gfx_text(52, 78, 1, kFrozenCol, "- PAUSED");
     gfx_text(12, 92, 1, col::white, "Hunger");
     gfx_text(70, 92, 1, care_tier_color(care_tier(p.hunger)), "%s", hunger_label(p.hunger));
     gfx_text(12, 105, 1, col::white, "Mood");

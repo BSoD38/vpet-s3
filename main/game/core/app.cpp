@@ -312,7 +312,10 @@ void App::runLoop()
         // to show a bubble to, and scanning would just burn battery. Scanning is additionally
         // paused (allowScan=false) in the scenes that forbid sleeping -- minigames and battle
         // are timing-critical, and one scan file costs ~7-12 ms of FAT+parse in a frame.
-        conversations.update(dt, conv_ctx(pet, drift), sleepAllowed);
+        // Also paused by the care freeze: a conversation moves bond, mood and personality,
+        // which is exactly what freezing promises won't happen. Anything already pending just
+        // waits (SceneHome hides the bubble) and is still there on the way out.
+        conversations.update(dt, conv_ctx(pet, drift), sleepAllowed && !pet.frozen());
         scenes.update(dt);
         scenes.render();                               // renders the (new) scene into fb
 

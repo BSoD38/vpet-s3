@@ -16,7 +16,9 @@ static const int OPT_X = 30, OPT_Y = 76, OPT_W = 180, OPT_H = 34, OPT_G = 12;
 struct MenuEntry {
     const char* label;
     SceneId     scene;
-    bool        gated;   // locked until Pet::activitiesUnlocked() (training/combat entries)
+    // Locked until Pet::activitiesUnlocked() -- and, for the same reason, while the care
+    // freeze is on: both entries lead somewhere that trains, spends or wounds the creature.
+    bool        gated;
 };
 static const MenuEntry OPTS[] = {
     { "Stats",      SceneId::Stats,        false },  // character sheet
@@ -27,23 +29,30 @@ static const MenuEntry OPTS[] = {
 };
 static const int OPT_N = (int)(sizeof(OPTS) / sizeof(OPTS[0]));
 
+// The gated entries are shut for two unrelated reasons; only one hint fits, and the freeze
+// wins it because it's the one the player can act on from here.
+static bool gate_closed(const Pet& pet) { return !pet.activitiesUnlocked() || pet.frozen(); }
+
 void SceneMenu::render()
 {
     fb.fillScreen(col::panel);
     gfx_text(30, 20, 2, col::accent, "Menu");
 
-    bool unlocked = app().pet.activitiesUnlocked();
+    bool closed = gate_closed(app().pet);
     for (int i = 0; i < OPT_N; i++) {
         int oy = OPT_Y + i * (OPT_H + OPT_G);
-        bool locked = OPTS[i].gated && !unlocked;
+        bool locked = OPTS[i].gated && closed;
         Rect{ OPT_X, oy, OPT_W, OPT_H }.button(OPTS[i].label,
             locked ? rgb565(56, 60, 74) : col::accent, locked ? col::dim : col::black);
     }
 
-    if (!unlocked) {   // explain why Battle/Activities are greyed out
-        const char* hint = "Locked until In-Training II";
+    if (closed) {   // explain why Battle/Activities are greyed out
+        bool frozen = app().pet.frozen();
+        const char* hint = frozen ? "Care paused (Settings > Game)"
+                                  : "Locked until In-Training II";
         int hw = (int)strlen(hint) * 6;
-        gfx_text((GAME_W - hw) / 2, OPT_Y + OPT_N * (OPT_H + OPT_G) + 2, 1, col::dim, "%s", hint);
+        gfx_text((GAME_W - hw) / 2, OPT_Y + OPT_N * (OPT_H + OPT_G) + 2, 1,
+                 frozen ? kFrozenCol : col::dim, "%s", hint);
     }
 
     draw_back();
@@ -57,11 +66,11 @@ void SceneMenu::onInput(const Input& in)
         app().setScene(SceneId::Home, Slide::Back);
         return;
     }
-    bool unlocked = app().pet.activitiesUnlocked();
+    bool closed = gate_closed(app().pet);
     for (int i = 0; i < OPT_N; i++) {
         int oy = OPT_Y + i * (OPT_H + OPT_G);
         if (Rect{ OPT_X, oy, OPT_W, OPT_H }.contains(in)) {
-            if (OPTS[i].gated && !unlocked) return;   // gated until In-Training II
+            if (OPTS[i].gated && closed) return;   // pre-In-Training II, or care frozen
             app().setScene(OPTS[i].scene, Slide::Forward);
             return;
         }

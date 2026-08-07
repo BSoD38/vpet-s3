@@ -7,6 +7,11 @@ TrainingResult grant_training(Pet& pet, float energyCost,
 {
     TrainingResult r{};
 
+    // Belt-and-braces: the Activities menu is closed while the care freeze is on, so no
+    // minigame should ever reach this. If one does, it awards nothing -- a paused creature
+    // that could still be trained would be a way to grow stats with the clock stopped.
+    if (pet.frozen()) return r;
+
     float have  = pet.energy();
     float cost  = energyCost < 0.0f ? 0.0f : energyCost;
     float ratio = (cost <= 0.0f) ? 1.0f : (have >= cost ? 1.0f : have / cost);

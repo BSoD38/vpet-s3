@@ -563,6 +563,11 @@ bool ConversationSystem::loadFile(const char* path, int entry)
 
 // --- streaming scan --------------------------------------------------------------
 
+// The stage floor is a content rule expressed as a number, so keep it pinned to the enum it
+// means rather than to the literal 2 it happens to be.
+static_assert(CONV_MIN_STAGE == STAGE_IN_TRAINING_2,
+              "CONV_MIN_STAGE must stay the first stage that may talk");
+
 void ConversationSystem::beginScan()
 {
     scanning_  = true;
@@ -572,6 +577,15 @@ void ConversationSystem::beginScan()
     scanFiles_ = 0;
     if (dir_) { closedir((DIR*)dir_); dir_ = nullptr; }
     scanStart_ = esp_timer_get_time();
+}
+
+// Throw away a half-finished scan. The reservoir goes too: choose() must never be reached with
+// candidates gathered for a creature that is no longer allowed to speak.
+void ConversationSystem::abortScan()
+{
+    if (dir_) { closedir((DIR*)dir_); dir_ = nullptr; }
+    scanning_ = false;
+    resCount_ = 0;
 }
 
 // Walks (pool x root) pairs, opening the next directory that exists. Returns false when the
@@ -684,17 +698,29 @@ void ConversationSystem::update(float dt, const ConvContext& ctx, bool allowScan
     strncpy(species_, ctx.species ? ctx.species : "", sizeof species_ - 1);
     species_[sizeof species_ - 1] = '\0';
 
+    // Tracked FIRST and unconditionally, so that whatever changed while conversations were
+    // suppressed (a nap, hunger, hatching past the stage floor) is already recognised as a
+    // trigger the moment they're allowed again.
+    const uint32_t h = ctx_hash(ctx);
+    if (h != ctxHash_) { ctxHash_ = h; dirty_ = true; }
+
+    // Too young to talk (CONV_MIN_STAGE). Placed above everything else because the stage can
+    // also DROP mid-session -- a new egg, or the devolve cheat -- which must tear down work
+    // already in flight rather than leave a bubble on an egg or let a scan finish and offer.
+    // The stage is part of the fingerprint above, so evolving past the floor is itself the
+    // trigger for the first scan.
+    if (ctx.stage < CONV_MIN_STAGE) {
+        if (scanning_) abortScan();
+        pending_ = false;
+        return;
+    }
+
     // allowScan=false pauses the FAT+parse work entirely: a scan file costs ~7-12 ms, which
     // is a missed parry window in battle or a hitch mid-minigame. An in-flight scan just
     // holds its directory handle and resumes when the caller is back somewhere uncritical.
     if (scanning_) { if (allowScan) stepScan(ctx, SCAN_BUDGET); return; }
 
     lastFriendship_ = ctx.friendship;    // finish()/dismiss() need it to roll the next gap
-
-    // Track the fingerprint even while suppressed, so that whatever changed during a nap (hour,
-    // hunger, waking up) is already recognised as a trigger the moment scanning resumes.
-    const uint32_t h = ctx_hash(ctx);
-    if (h != ctxHash_) { ctxHash_ = h; dirty_ = true; }
 
     if (pending_ || ctx.asleep || !allowScan) return;   // never interrupt, nag, or scan mid-play
 

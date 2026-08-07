@@ -5,6 +5,10 @@ distinct from the pet's own day/night `lightsOff` (its scheduled nap, which dims
 but keeps the game running). The pet can be napping while the device is Active, and the
 device can be asleep while the pet's schedule says "awake".
 
+A third, unrelated kind of "away" lives at the bottom of this doc: the
+[care freeze](#care-freeze--the-pet-being-away-not-the-device), which stops the *simulation*
+rather than the hardware.
+
 Code: [`engine/power.hpp`](../main/game/engine/power.hpp) /
 [`engine/power.cpp`](../main/game/engine/power.cpp), driven from
 [`core/app.cpp`](../main/game/core/app.cpp) `runLoop()` and routed at boot by
@@ -92,6 +96,58 @@ Threshold triggers are **edge-detected** with hysteresis (re-arm above 25/30/30)
 that simply sits low doesn't relight the screen every 15 min. The "already alerted" bitmask
 is stored in its **own NVS key** (`slpAlert`), *not* in the `PetState` blob — so this feature
 never bumps `PET_VERSION` or wipes an existing pet.
+
+## Care freeze — the *pet* being away, not the device
+
+**Settings → GAME → Freeze care.** Device sleep keeps the simulation running; the care freeze
+stops it. It exists for the stretches where the player genuinely can't look after the creature
+(a trip, a hospital stay, a week the device spends in a drawer) and would otherwise come back
+to a starved, sick, aged pet they never had a chance to prevent.
+
+The deal is symmetrical, and deliberately so: **nothing moves, and you can't touch it either.**
+Aging, evolution, the day/night clock, hunger, happiness, health, energy, poop, sickness, the
+neglect clock and personality drift all stop — and feeding, cleaning, healing, petting, poking,
+the lights, conversations, minigames and battles all refuse. Being able to top the creature up
+while nothing decays would make it a cheat rather than a pause.
+
+### How it's enforced
+
+One gate, at the top of [`Pet::tick()`](../main/game/sim/pet.cpp):
+
+```cpp
+if (frozen_) return;
+```
+
+Everything time-driven lives below that line, and every path into the simulation goes through
+`tick()` — the live frame loop, the light-sleep loop, and `Pet::boot()`'s offline catch-up.
+That last one is what makes the guarantee survive power cycles: a frozen pet that spends a week
+switched off replays the week through `tick()`, which does nothing, and `markSaved()` then
+re-stamps `lastUpdate` so the stretch is never seen as elapsed time again. There is no
+"frozen since" timestamp to keep in sync, because there is nothing to subtract.
+
+Care actions funnel through `Pet::careBlocked()`, which refuses and arms the usual "no" wiggle,
+so a tap on a greyed-out button still answers. `grant_training()` returns an empty result as a
+backstop, though the Activities and Battle menu entries are already shut.
+
+### Interaction with deep sleep
+
+`power_service_timer_wake()` checks `pet_frozen_saved()` **first** and re-sleeps immediately —
+before loading the creature and personality registries (~15 KB plus file IO) — since there is
+no catch-up to run and no threshold that could newly trip. The mode's whole premise is a long
+absence, so its polls should be the cheapest ones the firmware does. The PWR key still wakes
+the board instantly, so a freeze is never a lockout.
+
+### Where it shows
+
+| Surface | Frozen state |
+|---|---|
+| Home | Pause disc in the badge slot (outranks the mood cloud and the attention "!"), creature holds position, whole action bar greyed, `Care paused - Settings > Game` caption |
+| Menu | Battle + Activities greyed, hint points at the toggle |
+| Stats | `- PAUSED` beside the CARE heading |
+| Settings → GAME | Speed reads `Now: paused`; the toggle row itself |
+
+Persisted in its **own NVS key** (`frzn`), like `slpAlert` above — no `PET_VERSION` bump, no
+wiped pets. A newly hatched egg always starts running, whatever the previous creature was doing.
 
 ## PWR button (GPIO6, active-low)
 

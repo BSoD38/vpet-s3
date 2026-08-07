@@ -15,10 +15,11 @@ static const char* const TABS[] = { "GAME", "SYSTEM" };
 static const int TAB_N = 2;
 static const int TAB_X = 8, TAB_Y = 44, TAB_W = GAME_W - 16, TAB_H = 32;
 
-// GAME page: game-speed grid
+// GAME page: game-speed grid (two rows, ending at y226), then the care-freeze row under it
 static const int GRID_X0 = 7, GRID_Y = 140, BTN_W = 52, BTN_H = 38, BTN_GX = 6, BTN_GY = 10, COLS = 4;
+static const int FRZ_LBL_Y = 234, FRZ_Y = 248;
 
-// SYSTEM page: full-width rows
+// Full-width rows, shared by both pages
 static const int ROW_X = 16, ROW_W = GAME_W - 32, ROW_H = 34;
 static const int DBG_Y = 96, TIME_Y = 138, CHEAT_Y = 180, UPD_Y = 222, RESET_Y = 264;
 
@@ -34,7 +35,7 @@ static Rect speed_btn(int i)
              GRID_Y  + (i / COLS) * (BTN_H + BTN_GY), BTN_W, BTN_H };
 }
 
-// SYSTEM page rows share x/width/height; only the y differs.
+// Full-width rows share x/width/height; only the y differs.
 static Rect sys_row(int y) { return { ROW_X, y, ROW_W, ROW_H }; }
 
 void SceneSettings::onEnter()
@@ -59,14 +60,33 @@ void SceneSettings::update(float dt)
 
 static void render_game(App& app)
 {
-    unsigned speed = app.pet.state().gameSpeed;
-    gfx_text(16, 88,  1, col::dim,  "Game speed (1x = real time)");
-    gfx_text(16, 104, 2, col::good, "Now: %ux", speed);
+    unsigned speed  = app.pet.state().gameSpeed;
+    bool     frozen = app.pet.frozen();
+
+    gfx_text(16, 88, 1, col::dim, "Game speed (1x = real time)");
+    // While frozen the multiplier is moot -- the clock it multiplies isn't running. The
+    // buttons stay live, though: picking the speed you want to come back to is a reasonable
+    // thing to do while packing.
+    if (frozen) gfx_text(16, 104, 2, kFrozenCol, "Now: paused");
+    else        gfx_text(16, 104, 2, col::good,  "Now: %ux", speed);
     for (int i = 0; i < SPEED_N; i++) {
         bool sel = ((unsigned)SPEEDS[i] == speed);
         char lbl[8]; snprintf(lbl, sizeof lbl, "%dx", SPEEDS[i]);
-        speed_btn(i).button(lbl, sel ? col::accent : rgb565(60, 64, 84), sel ? col::black : col::white);
+        uint16_t bg = sel ? (frozen ? rgb565(70, 92, 112) : col::accent) : rgb565(60, 64, 84);
+        speed_btn(i).button(lbl, bg, sel && !frozen ? col::black : col::white);
     }
+
+    // --- care freeze (Pet::setFrozen) ---
+    gfx_text(16, FRZ_LBL_Y, 1, col::dim, "Care");
+    sys_row(FRZ_Y).fill(frozen ? kFrozenCol : rgb565(60, 64, 84));
+    gfx_text(ROW_X + 12, FRZ_Y + 10, 2, frozen ? col::black : col::white, "Freeze care");
+    gfx_text(ROW_X + ROW_W - 38, FRZ_Y + 11, 2, frozen ? col::black : col::dim,
+             frozen ? "ON" : "OFF");
+    // Says what it COSTS as well as what it saves: the player is agreeing to both halves.
+    gfx_text_wrap(16, FRZ_Y + ROW_H + 6, GAME_W - 32, 1, frozen ? kFrozenCol : col::dim,
+                  frozen ? "Nothing ages or decays. Care is disabled."
+                         : "Stops aging and care while you're away.",
+                  2, -1, 2);
 }
 
 static void render_system(App& app)
@@ -163,6 +183,12 @@ void SceneSettings::onInput(const Input& in)
     if (tab >= 0) { page_ = tab; return; }
 
     if (page_ == 0) {
+        // A plain toggle, no hold-to-confirm: freezing costs nothing and thawing undoes it
+        // exactly, so the factory-reset ceremony would only make the mode annoying to use.
+        if (sys_row(FRZ_Y).contains(in)) {
+            app().pet.setFrozen(!app().pet.frozen());
+            return;
+        }
         for (int i = 0; i < SPEED_N; i++) {
             if (speed_btn(i).contains(in)) {
                 app().pet.setGameSpeed((uint16_t)SPEEDS[i]);

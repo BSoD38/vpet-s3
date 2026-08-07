@@ -10,6 +10,7 @@
 #include "assets/tiles.hpp"     // grass_tile / dirt_tile (ground)
 #include "esp_random.h"
 #include <cmath>
+#include <cstdio>
 #include <cstring>
 
 static const Sprite SPR_FALLBACK { spr_unknown_data, SPRITE_W, SPRITE_H, SPRITE_TRANSP };  // "?" when a sprite can't be shown
@@ -187,7 +188,8 @@ void SceneHome::update(float dt)
     int bodyCy = PET_FEET - psh / 2;
     int hzW = psw / 2 + PET_HIT_MARGIN, hzH = psh / 2 + PET_HIT_MARGIN;
     bool onPetZone = Rect{ bodyCx - hzW, bodyCy - hzH, hzW * 2, hzH * 2 }.contains(tx_, ty_);
-    bool interactive = p.stage != STAGE_EGG && !p.lightsOff && !p.sick;
+    const bool frozen = pet.frozen();           // care freeze: nothing here reaches the creature
+    bool interactive = p.stage != STAGE_EGG && !p.lightsOff && !p.sick && !frozen;
     bool overPet = interactive && onPetZone;    // can actually pet/poke
     overPet_ = overPet;
     rubbingNow_ = false;
@@ -202,7 +204,10 @@ void SceneHome::update(float dt)
     // "no" wiggle: refused from the menu (e.g. feed while sick), or from touching a sick pet
     auto refuse = [&] { refuseTimer_ = REFUSE_TIME; anim_.react(Anim::Nope, REFUSE_TIME); };
     if (pet.checkRefused()) refuse();
-    if (justPressed && onPetZone && p.sick) refuse();
+    // Sick, or paused: either way the touch goes nowhere, and a shake says so. (Pet::play()
+    // would arm the same wiggle, but overPet is already false in both cases, so it is never
+    // reached -- this is the branch that actually answers a finger on the creature.)
+    if (justPressed && onPetZone && (p.sick || frozen)) refuse();
     // An UPSET creature won't be touched (PetMood): refuse at first contact and never arm a
     // gesture, so no rub ring appears and no bond can be farmed from a refusing creature.
     // (Food is still accepted -- that's the way back.)
@@ -271,11 +276,14 @@ void SceneHome::update(float dt)
     //   - a finger on the creature, so it can't stroll out from under a rub;
     //   - an upset creature (PetMood), which sulks on the spot. It already refuses to be
     //     touched, and standing still says that better than pacing would.
+    //   - a FROZEN creature. Its clock isn't running, so it has nowhere to walk to; holding
+    //     position (while the idle frames keep flipping, so it doesn't read as crashed) is
+    //     the clearest possible statement that the world is paused.
     // The two are separate because showing the walk pose and being allowed to cover ground
     // are different questions: the first is the animation's business, the second the scene's.
     bool touched    = touchActive_ || (down_ && overPet);
     bool stepping   = anim_.walkCycle();
-    bool travelling = p.stage != STAGE_EGG && !touched && !pet.isUpset();
+    bool travelling = p.stage != STAGE_EGG && !touched && !pet.isUpset() && !frozen;
     walk_.update(dt, stepping, travelling, anim_.stepPhase());
     anim_.face(walk_.facingRight());   // DMC sprites face left, so mirror == walking right
 
@@ -351,6 +359,19 @@ static int clamp_centre(int x, int r)  // centre-anchored (glyphs of radius r)
     return (x > GAME_W - r) ? GAME_W - r : x;
 }
 
+// Care-freeze marker: a pause glyph on a cool disc. Takes the badge slot and OUTRANKS both the
+// mood cloud and the attention prompt -- while the sim is suspended neither of those is
+// actionable, and "nothing is running" is the one thing the player has to be able to read.
+// Deliberately static (no pulse): everything else in that slot animates, and stillness is the
+// message. kFrozenCol is shared with the Settings row, the Menu hint and the Stats sheet.
+static void draw_frozen(int x, int y)
+{
+    fb.fillCircle(x, y, 10, kFrozenCol);
+    fb.drawCircle(x, y, 10, col::black);
+    fb.fillRect(x - 4, y - 5, 3, 11, col::black);
+    fb.fillRect(x + 2, y - 5, 3, 11, col::black);
+}
+
 static void draw_attention(int x, int y, float phase, uint16_t color)
 {
     int r = 9 + (int)(2.0f * sinf(phase * 5.0f));
@@ -364,6 +385,7 @@ void SceneHome::render()
 {
     Pet& pet = app().pet;
     const PetState& p = pet.state();
+    const bool frozen = pet.frozen();
 
     // background
     fb.fillRect(0, 0, GAME_W, HORIZON, col::sky);
@@ -435,8 +457,11 @@ void SceneHome::render()
     // must clamp BELOW it or they'd be painted over while their hit-rects kept eating taps.
     const int cueMinY = app().debugOverlay ? 90 : 48;
 
+    // Hidden while frozen as well as while asleep: a conversation moves bond, mood and
+    // personality, so offering one would contradict the pause. It keeps its place and is
+    // still waiting on the way out.
     bubble_ = Rect{ 0, 0, 0, 0 };
-    if (app().conversations.pending() && !p.lightsOff) {
+    if (app().conversations.pending() && !p.lightsOff && !frozen) {
         int by = feet - psh - 26;
         if (by < cueMinY) by = cueMinY;            // never ride up into the HUD panel/overlay
         Rect b{ cx + 24, by, 46, 30 };
@@ -458,11 +483,15 @@ void SceneHome::render()
     // already have their own visible markers above. Suppressed while asleep (feeding is
     // refused then, so there would be nothing to act on) and for an egg (it can't eat).
     // Sits left of centre so it never collides with the SICK / Zzz text.
-    if (!p.lightsOff && p.stage != STAGE_EGG) {
+    // The freeze marker shares the slot but ignores the asleep/egg guard: those states are
+    // themselves suspended, so the pause is the more important thing to say about either.
+    if (frozen || (!p.lightsOff && p.stage != STAGE_EGG)) {
         int by = feet - psh - 10;                  // above the head, whatever the sprite size
         if (by < cueMinY + 6) by = cueMinY + 6;    // ...but never riding up into the HUD/overlay
         int bx = clamp_centre(cx - 44, 14);        // beside the head, but never off the edge
-        if (pet.isUpset()) {
+        if (frozen) {
+            draw_frozen(bx, by);
+        } else if (pet.isUpset()) {
             draw_mood(bx, by, t_, pet.mood() == MOOD_ANGRY);
         } else {
             int ht = care_tier(p.hunger), mt = care_tier(p.happiness);
@@ -494,15 +523,25 @@ void SceneHome::render()
     gfx_text(6, HORIZON + 12, 1, col::white, "%02d:%02d:%02d",
              dt.hour, dt.minute, dt.second);
 
+    // Caption for the freeze, above the (fully greyed) action bar. Says where to undo it:
+    // Settings is three taps away and there is no other route back.
+    if (frozen) {
+        const char* msg = "Care paused - Settings > Game";
+        int mw = (int)strlen(msg) * 6;
+        gfx_text((GAME_W - mw) / 2, ACT_Y - 13, 1, kFrozenCol, "%s", msg);
+    }
+
     // bottom action bar: quick care actions
     for (int i = 0; i < ACT_N; i++) {
         int bx = act_x(i);
-        bool feedBlocked = (i == 0 && (p.sick || p.lightsOff));   // no feeding while sick/asleep
-        uint16_t bg = feedBlocked ? rgb565(46, 42, 46) : col::panel;
+        // Frozen greys the WHOLE bar: every one of these refuses, and a button that looks
+        // live but only ever answers with the "no" wiggle is worse than an honest one.
+        bool blocked = frozen || (i == 0 && (p.sick || p.lightsOff));   // no feeding while sick/asleep
+        uint16_t bg = blocked ? rgb565(46, 42, 46) : col::panel;
         act_rect(i).fill(bg, 7);
         int ix = bx + ACT_W / 2, iy = ACT_Y + 18;
         switch (i) {
-            case 0: icon_feed(ix, iy, feedBlocked); break;
+            case 0: icon_feed(ix, iy, blocked); break;
             case 1: icon_clean(ix, iy); break;
             case 2: icon_heal(ix, iy); break;
             case 3: icon_lights(ix, iy, p.lightsOff, bg); break;
@@ -510,7 +549,7 @@ void SceneHome::render()
         const char* lbl = (i == 3) ? (p.lightsOff ? "Wake" : "Sleep") : ACT_LABEL[i];
         int lw = (int)strlen(lbl) * 6;
         gfx_text(bx + (ACT_W - lw) / 2, ACT_Y + ACT_H - 12, 1,
-                 feedBlocked ? col::dim : col::white, "%s", lbl);
+                 blocked ? col::dim : col::white, "%s", lbl);
     }
 
     // top-right menu button ("other" activities/settings/stats)
@@ -527,10 +566,15 @@ void SceneHome::render()
                  (int)walk_.x(), !walk_.walking() ? "." : walk_.facingRight() ? ">" : "<");
         gfx_text(4, 62, 1, col::good, "prog%.0f/%d dist%.0f mv%.1f bat%.2fV",
                  rubProgress_, (int)PET_CHUNK_DIST, rubDist_, lastMove_, BAT_analogVolts);
-        // exact care values live here now that the HUD shows coarse states
-        gfx_text(4, 74, 1, col::good, "hr%d slp%d stg%.0f%% spd%ux hun%.0f hap%.0f hp%.0f",
+        // exact care values live here now that the HUD shows coarse states. The speed field
+        // doubles as the freeze readout -- the line is already the full 240px wide, and a
+        // frozen sim has no meaningful multiplier to report.
+        char sp[10];
+        if (frozen) strcpy(sp, "FROZEN");
+        else        snprintf(sp, sizeof sp, "spd%ux", (unsigned)p.gameSpeed);
+        gfx_text(4, 74, 1, col::good, "hr%d slp%d stg%.0f%% %s hun%.0f hap%.0f hp%.0f",
                  pet.simHour(), pet.isSleepTime(), pet.stageProgress() * 100.0f,
-                 (unsigned)p.gameSpeed, p.hunger, p.happiness, p.health);
+                 sp, p.hunger, p.happiness, p.health);
     }
 }
 

@@ -108,6 +108,10 @@ static const char* K_BONDP      = "bondp";   // routine bond points granted this
 static const char* K_BONDT      = "bondt";   // RTC second the current 24h window began
 static const char* K_IDLE       = "idle";    // idle REAL-seconds since the last interaction
 static const char* K_BOND_SCALE = "bscale";  // 1 once the bond has been rescaled to the wide range
+static const char* K_FROZEN     = "frzn";    // 1 while the care freeze is on (see setFrozen)
+
+// Deliberately not a Pet method: power.cpp asks this BEFORE it decides to build a Pet at all.
+bool pet_frozen_saved(const SaveStore& save) { return save.loadU8(K_FROZEN, 0) != 0; }
 
 static const uint32_t PET_MAGIC   = 0x50455401;   // 'PET\1'
 static const uint16_t PET_VERSION = 6;             // v6: + battle record (wins/losses) + training energy
@@ -117,6 +121,15 @@ static float rnd01(void) { return esp_random() * (1.0f / 4294967296.0f); }
 const Creature* Pet::cur() const
 {
     return (idx_ >= 0 && idx_ < reg_.count()) ? &reg_.at(idx_) : nullptr;
+}
+
+// Panel brightness follows the creature's lights -- EXCEPT while frozen. The day/night clock
+// isn't running then, so a night dim would never lift on its own, and toggleLights() (the way
+// a player would normally undo it) refuses while the freeze is on: the pet would be stuck
+// behind a 25%-lit screen for the whole trip. A paused game is a game being LOOKED at.
+void Pet::applyBacklight() const
+{
+    Set_Backlight((s_.lightsOff && !frozen_) ? SLEEP_BACKLIGHT : LCD_Backlight);
 }
 
 // sleep window test; window may wrap past midnight (e.g. 22 -> 7)
@@ -263,6 +276,12 @@ void Pet::newEgg()
 void Pet::tick(float dt)   // dt is SIM seconds (the caller has applied gameSpeed)
 {
     if (dt <= 0) return;
+    // Care freeze: the SINGLE gate for the whole feature (see Pet::setFrozen). Everything the
+    // creature does over time -- aging, evolution, the day clock, hunger/happiness/health,
+    // energy, poop, sickness, the neglect clock, personality drift -- lives below this line,
+    // and boot()'s offline catch-up comes through here as well, so an absence spent frozen
+    // costs the player nothing whether the device was on, asleep or off.
+    if (frozen_) return;
     s_.ageSecs   += dt;
     s_.stageSecs += dt;
 
@@ -285,7 +304,7 @@ void Pet::tick(float dt)   // dt is SIM seconds (the caller has applied gameSpee
     if (wantSleep != (bool)s_.lastSleepPhase) {
         s_.lastSleepPhase = wantSleep ? 1 : 0;
         s_.lightsOff = wantSleep ? 1 : 0;
-        Set_Backlight(s_.lightsOff ? SLEEP_BACKLIGHT : LCD_Backlight);
+        applyBacklight();
         ESP_LOGI(TAG, "%s (hour=%d)", s_.lightsOff ? "auto-sleep" : "auto-wake", simHour());
         // Letting the schedule run its course IS respecting it. Half strength (it's passive,
         // not a decision) and direct, so it doesn't count as breaking a neglect streak.
@@ -381,6 +400,7 @@ void Pet::markSaved()
     // Persisted so the neglect clock survives reboots AND the 15-min deep-sleep wake
     // slices, each of which is shorter than IDLE_PERIOD on its own.
     save_.storeU32(K_IDLE, (uint32_t)idleSecs_);
+    save_.storeU8(K_FROZEN, frozen_ ? 1 : 0);
     if (drift_) drift_->persist();      // no-op unless the drift state actually changed
     save_.endBatch();
 }
@@ -415,6 +435,11 @@ void Pet::forgetSave()
 void Pet::boot()
 {
     PCF85063_Read_Time(&datetime);   // seed the RTC global before first clock_now()
+
+    // FIRST, before anything can tick: the catch-up loop below runs through tick(), and tick()
+    // is where the freeze is enforced. Loaded any later and a week's absence would be replayed
+    // onto a creature the player had explicitly put on ice.
+    frozen_ = pet_frozen_saved(save_);
 
     if (save_.load(s_) && s_.magic == PET_MAGIC && s_.version == PET_VERSION) {
         if (s_.gameSpeed == 0) s_.gameSpeed = 1;
@@ -478,10 +503,35 @@ void Pet::boot()
         bondToday_ = 0;                  // ...and doesn't inherit a spent daily allowance
         bondWinT_  = clock_now();
         idleSecs_  = 0.0f;
+        frozen_    = false;              // ...and hatches running, whatever the last one was doing
     }
 
     markSaved();
-    Set_Backlight(s_.lightsOff ? SLEEP_BACKLIGHT : LCD_Backlight);
+    applyBacklight();
+}
+
+void Pet::setFrozen(bool on)
+{
+    if (frozen_ == on) return;
+    frozen_ = on;
+    // The idle/neglect clock is deliberately NOT reset either way. It stops dead while frozen
+    // (tick() never reaches it) and resumes exactly where it was, so a freeze can neither
+    // launder a neglect streak that had already accrued nor add to it.
+    //
+    // markSaved() re-stamps lastUpdate, which is what re-anchors the offline clock on the way
+    // out: the frozen stretch is never seen as elapsed time by the next boot's catch-up.
+    ESP_LOGI(TAG, "care %s", on ? "FROZEN (simulation paused)" : "resumed");
+    applyBacklight();   // a frozen pet's night dim would never lift -- see applyBacklight()
+    markSaved();
+}
+
+// The one gate every care action funnels through while frozen. Arms the "no" wiggle so a tap
+// on a greyed-out button still answers instead of doing nothing at all.
+bool Pet::careBlocked()
+{
+    if (!frozen_) return false;
+    refused_ = true;
+    return true;
 }
 
 // Hunger at or above this counts as overfeeding: an indulgent DEVIATION from routine
@@ -490,6 +540,7 @@ static const float OVERFEED_AT = 85.0f;
 
 bool Pet::canEat()
 {
+    if (careBlocked()) { ESP_LOGI(TAG, "refuses food (care frozen)"); return false; }
     if (s_.stage == STAGE_EGG) { ESP_LOGI(TAG, "can't feed (egg)"); return false; }
     if (s_.lightsOff) { ESP_LOGI(TAG, "refuses food (asleep)"); refused_ = true; return false; }
     if (s_.sick)      { ESP_LOGI(TAG, "refuses food (sick)");   refused_ = true; return false; }
@@ -524,6 +575,7 @@ void Pet::feed(const Food& f)
 
 void Pet::clean()
 {
+    if (careBlocked()) return;
     s_.poop = 0;
     addFriendship(FR_CLEAN);
     // Duty is drift-NEUTRAL (no vector) but it IS an interaction: it must break a neglect
@@ -536,6 +588,7 @@ void Pet::clean()
 
 void Pet::heal()
 {
+    if (careBlocked()) return;
     s_.sick = 0;
     s_.health = clampf(s_.health + 40, 0, 100);
     addFriendship(FR_HEAL);
@@ -546,6 +599,7 @@ void Pet::heal()
 
 bool Pet::play(float amount, PlayKind kind)
 {
+    if (careBlocked()) return false;
     if (s_.stage == STAGE_EGG || s_.sick || s_.lightsOff) return false;
     // Upset creatures don't want to be touched. The "no" wiggle carries the message, and food
     // is still accepted -- that's the way back (see PetMood). Returning false lets the scene
@@ -623,11 +677,14 @@ void Pet::applyConversationChoice(int friendshipDelta, int happinessDelta,
 
 void Pet::toggleLights()
 {
+    // Frozen: the day/night clock isn't running either, so putting it under or waking it up
+    // would be a lighting change with nothing behind it.
+    if (careBlocked()) return;
     s_.lightsOff = !s_.lightsOff;
     // Sync to the SCHEDULE (not to lightsOff) so this manual choice holds until the
     // next window edge — otherwise waking it mid-window re-triggers auto-sleep.
     s_.lastSleepPhase = schedSleep() ? 1 : 0;
-    Set_Backlight(s_.lightsOff ? SLEEP_BACKLIGHT : LCD_Backlight);
+    applyBacklight();
     // Overriding the schedule (waking it during its sleep window, or forcing it under early)
     // is a real choice about how strictly this creature is being raised.
     nudgeDrift(schedSleep() != (bool)s_.lightsOff ? DRIFT_SLEEP_NO : DRIFT_SLEEP_OK);
@@ -773,6 +830,7 @@ void Pet::recordLoss() { if (s_.losses != 0xFFFFFFFFu) s_.losses++; }
 
 bool Pet::spendEnergy(float amount)
 {
+    if (frozen_) return false;      // stamina neither regenerates nor is spent while paused
     if (amount <= 0.0f) return true;
     if (s_.energy < amount) return false;
     s_.energy -= amount;

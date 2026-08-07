@@ -32,6 +32,11 @@ struct Rect {
     }
 };
 
+// The care-freeze accent (Pet::setFrozen). Shared for the same reason care_tier_color() is:
+// the Home pause marker and caption, the Menu lock hint, the Stats note and the Settings
+// toggle all describe ONE state, and must not drift into four slightly different blues.
+inline constexpr uint16_t kFrozenCol = rgb565(150, 205, 240);
+
 // Colour for a coarse care tier (0..4) from sim/pet.hpp's care_tier(). Lives here rather
 // than in the sim so the simulation layer stays free of the renderer's palette.
 inline uint16_t care_tier_color(int tier) {

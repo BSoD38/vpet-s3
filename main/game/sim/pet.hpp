@@ -53,6 +53,12 @@ enum PlayKind : uint8_t {
 // Returns false on an unknown token -- callers must treat that as a no-op, never as "ok".
 bool mood_from_id(const char* s, PetMood* out);
 
+// Is the SAVED pet's care freeze on (see Pet::setFrozen)? Reads the flag straight out of NVS
+// without constructing a Pet or the registries one needs, for the headless deep-sleep poll --
+// which wants to know whether a catch-up is worth doing at all before it loads ~15 KB of data
+// it may not need. Pet::frozen() is the normal accessor.
+bool pet_frozen_saved(const SaveStore& save);
+
 // --- Coarse care readout ----------------------------------------------------------
 // Hunger and happiness are shown as named states rather than numbers on purpose: a
 // precise gauge is an optimization target, and every player filling it the same way
@@ -154,8 +160,11 @@ class Pet {
     bool      startedFresh_ = false;   // boot() hatched a new egg (no save was loaded)
     uint8_t   mood_ = MOOD_OK;         // PetMood; out-of-blob, per-creature
     uint8_t   mend_ = 0;               // care shown since being upset (softens a step when full)
+    bool      frozen_ = false;         // care freeze: the whole sim is suspended (see setFrozen)
 
     void newEgg();
+    bool careBlocked();           // frozen? then refuse the care action and arm the "no" wiggle
+    void applyBacklight() const;  // panel brightness for the current lights + freeze state
     int  pickEvolution() const;   // first eligible evolution edge (creature idx), or -1
     void evolveTo(int creatureIdx);       // switch creature, reset trained modifiers
     bool schedSleep() const;      // does the day-clock schedule want the pet asleep now?
@@ -199,6 +208,20 @@ public:
 
     void boot();                  // seed RTC, load save + offline catch-up, else new egg
     void tick(float dt);          // advance sim by dt SIM-seconds (caller applies gameSpeed)
+
+    // --- Care freeze ("I can't look after it for a while") -----------------------------
+    // Suspends the ENTIRE simulation: tick() returns immediately, so nothing ages, decays,
+    // evolves, poops, falls ill, regenerates or drifts. In exchange the creature can't be
+    // cared for either -- feeding, cleaning, healing, petting, the lights and training all
+    // refuse. The two halves are deliberately inseparable: topping the creature up while
+    // nothing decays would make this a cheat rather than a pause.
+    //
+    // tick() being the ONE gate is what makes the guarantee hold across power cycles too:
+    // boot()'s offline catch-up replays absence through tick(), so a frozen pet that spends
+    // a week switched off replays that week as nothing at all. Persisted OUTSIDE the
+    // versioned blob (its own NVS key), so adding it wiped nobody's pet.
+    bool frozen() const { return frozen_; }
+    void setFrozen(bool on);      // no-op if unchanged; persists immediately
     // Feed a specific food. Which food is chosen is the player's main day-to-day way of
     // shaping the creature's temperament, so this is the hook the personality system
     // reads (see docs/food-and-feeding.md). Refuses (and arms the "no" wiggle) when the

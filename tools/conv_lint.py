@@ -43,6 +43,9 @@ MAX_NODES, MAX_CHOICES = 32, 3
 MOODS = ("ok", "hurt", "angry")
 MOOD_GATES = MOODS + ("upset",)          # gates may also ask for "upset" (hurt OR angry)
 FRIENDSHIP_MAX = 10000                   # sim/pet.hpp: a gate above this can never pass
+# CONV_MIN_STAGE: the firmware refuses to offer ANY conversation below this life stage, so a
+# lower minStage doesn't do what its author thinks it does.
+MIN_STAGE = 2
 # read_file()'s cap in conversation.cpp. An oversized file is skipped on device (with only a
 # log line nobody sees), which is precisely the failure this script exists to make visible.
 MAX_FILE_BYTES = 32768
@@ -202,6 +205,10 @@ def check_conversation(label, data, st):
                         ("minStage", 0, 7), ("minWins", 0, 10**9)):
         if fld in w and not (isinstance(w[fld], int) and lo <= w[fld] <= hi):
             err(label, f"when.{fld} must be an integer {lo}..{hi}")
+    if isinstance(w.get("minStage"), int) and w["minStage"] < MIN_STAGE:
+        warn(label, f"when.minStage {w['minStage']} is below the firmware floor "
+                    f"({MIN_STAGE}) -- an egg and the first hatched form never talk, so this "
+                    f"conversation still starts at stage {MIN_STAGE}")
     if isinstance(w.get("minFriendship"), int) and w["minFriendship"] > FRIENDSHIP_MAX:
         err(label, f"when.minFriendship {w['minFriendship']} is above FRIENDSHIP_MAX "
                    f"({FRIENDSHIP_MAX}) -- this gate can never pass")
