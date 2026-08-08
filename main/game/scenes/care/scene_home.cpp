@@ -598,9 +598,11 @@ void SceneHome::onInput(const Input& in)
         if (act_rect(i).contains(in)) {
             switch (i) {
                 // Feeding is now a choice of food, so this opens the picker rather than
-                // feeding immediately. canEat() arms the "no" wiggle when it can't eat,
-                // so a blocked tap still gives the same feedback it always did.
+                // feeding immediately. canEat() arms the "no" wiggle when it can't eat; the
+                // sound has to be asked for explicitly, because pre-gating here means feed()
+                // -- which is what normally voices a refusal -- is never reached.
                 case 0: if (app().pet.canEat()) app().setScene(SceneId::Feed, Slide::Forward);
+                        else                    app().pet.playRefusal();
                         break;
                 case 1: app().pet.clean();        break;
                 case 2: app().pet.heal();         break;

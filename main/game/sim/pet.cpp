@@ -5,6 +5,11 @@
 #include "engine/util.hpp"      // clampf (shared)
 #include "engine/clock.hpp"
 #include "engine/drivers.hpp"    // Set_Backlight, LCD_Backlight, PCF85063_Read_Time, datetime
+// Care sounds are fired HERE rather than in the scenes because this is where the outcome is
+// known: only feed() can tell an accepted meal from a refused one, and only evolveTo() can
+// tell hatching from evolving. Putting them at the call sites would mean every future caller
+// has to remember, and would drift the moment one of them forgot.
+#include "engine/audio/sfx.hpp"
 #include "esp_log.h"
 #include "esp_random.h"
 #include <cmath>
@@ -227,10 +232,27 @@ int Pet::pickEvolution() const
     return -1;   // none eligible yet (keep aging until conditions are met)
 }
 
+void Pet::applyVoice() const
+{
+    const Creature* c = cur();
+    audio::VoiceProfile v;
+    if (c) {
+        v.species = c->id;
+        v.family  = c->voiceFamily;
+        v.dir     = c->dir;          // <dir>/sounds/ is this creature's own set
+        v.pitch   = c->voicePitch;
+    }
+    audio::set_voice(v);    // copies the strings; see set_voice
+}
+
 void Pet::evolveTo(int creatureIdx)
 {
     idx_ = creatureIdx;
     const Creature* c = cur();
+    // BEFORE the fanfare below: hatching and evolving are the two moments the voice changes,
+    // and they are also the two moments it is most audible. The cry belongs to the creature
+    // coming out, not the one going in.
+    applyVoice();
     if (c) {
         strncpy(s_.creatureId, c->id, sizeof(s_.creatureId) - 1);
         s_.creatureId[sizeof(s_.creatureId) - 1] = '\0';
@@ -245,6 +267,12 @@ void Pet::evolveTo(int creatureIdx)
         s_.hunger = 100; s_.happiness = 80; s_.health = 100;
         s_.poop = 0; s_.poopTimer = 0;
     }
+    // Silent during boot()'s offline replay: catching up on eight hours away can cross
+    // several evolution edges at once, and a stack of fanfares at power-on is not a
+    // celebration of anything the player just did.
+    if (!catchingUp_)
+        sfx::play((c && c->tier == STAGE_IN_TRAINING_1) ? sfx::kHatch : sfx::kEvolve);
+
     char ab[16];
     ESP_LOGI(TAG, "evolved -> %s (%s, age=%s, friend=%u, mistakes=%u)",
              c ? c->name : "?", stageName(), ageStr(ab, sizeof ab),
@@ -261,6 +289,7 @@ void Pet::newEgg()
     idx_ = reg_.indexOf("egg");
     const Creature* c = cur();
     if (c) s_.stage = c->tier;
+    applyVoice();
     s_.gameSpeed = 1;
     s_.hunger = 100; s_.happiness = 80; s_.health = 100;
     s_.energy = ENERGY_MAX;            // full training stamina at birth
@@ -456,6 +485,11 @@ void Pet::boot()
             const Creature* c = cur();
             if (c) { strncpy(s_.creatureId, c->id, sizeof(s_.creatureId) - 1); s_.stage = c->tier; }
         }
+        // The loaded species speaks with its own voice from here on. This is the one path that
+        // sets idx_ without going through evolveTo()/newEgg(), so it needs its own call --
+        // and it must come before the catch-up loop, which can evolve and re-voice several
+        // times over on top of it.
+        applyVoice();
         // One-time bond rescale: FRIENDSHIP_MAX widened from 1000 to 10000, so an existing
         // save's bond would otherwise read as a much lower tier than the player earned.
         // Migrated behind an out-of-blob flag rather than a PET_VERSION bump, which would
@@ -547,9 +581,27 @@ bool Pet::canEat()
     return true;
 }
 
+// The sound a refused care action makes. Two different "no"s: the ACTION being blocked (an
+// egg cannot eat, care is frozen) is the game saying no and gets the mechanical ui_denied,
+// while the creature turning food down is the creature's own answer and gets its voice.
+//
+// Asked of the STATE rather than of refused_, which cannot answer it: careBlocked() sets
+// refused_ to arm the "no" wiggle before any of this is read, so a frozen feed looked exactly
+// like a sick one -- and played the creature's refusal while clean/heal/lights, blocked by the
+// same freeze, played ui_denied.
+void Pet::playRefusal() const
+{
+    const bool actionBlocked = frozen_ || s_.stage == STAGE_EGG;
+    sfx::play(actionBlocked ? sfx::kDenied : sfx::kRefuse);
+}
+
 void Pet::feed(const Food& f)
 {
-    if (!canEat()) return;
+    if (!canEat()) {
+        playRefusal();
+        return;
+    }
+    sfx::play(sfx::kEat);
     ate_ = true;   // accepted -- the home scene plays the eat animation off this
 
     const bool overfed = (s_.hunger >= OVERFEED_AT);
@@ -575,7 +627,8 @@ void Pet::feed(const Food& f)
 
 void Pet::clean()
 {
-    if (careBlocked()) return;
+    if (careBlocked()) { sfx::play(sfx::kDenied); return; }
+    sfx::play(sfx::kClean);
     s_.poop = 0;
     addFriendship(FR_CLEAN);
     // Duty is drift-NEUTRAL (no vector) but it IS an interaction: it must break a neglect
@@ -588,7 +641,8 @@ void Pet::clean()
 
 void Pet::heal()
 {
-    if (careBlocked()) return;
+    if (careBlocked()) { sfx::play(sfx::kDenied); return; }
+    sfx::play(sfx::kHeal);
     s_.sick = 0;
     s_.health = clampf(s_.health + 40, 0, 100);
     addFriendship(FR_HEAL);
@@ -604,8 +658,11 @@ bool Pet::play(float amount, PlayKind kind)
     // Upset creatures don't want to be touched. The "no" wiggle carries the message, and food
     // is still accepted -- that's the way back (see PetMood). Returning false lets the scene
     // withhold the bond/reward FX too: a refused touch must grant NOTHING.
-    if (isUpset()) { refused_ = true; return false; }
+    if (isUpset()) { refused_ = true; sfx::play(sfx::kRefuse); return false; }
     s_.happiness = clampf(s_.happiness + amount, 0, 100);
+    // Quiet: this fires on every touch of the pet, including drags across it, so it has to
+    // sit under the UI rather than announce itself.
+    sfx::play(sfx::kPet, 0.6f);
     nudgeDrift(kind == PLAY_AFFECTION ? DRIFT_AFFECTION : DRIFT_ROUGH);
     return true;
 }
@@ -679,8 +736,9 @@ void Pet::toggleLights()
 {
     // Frozen: the day/night clock isn't running either, so putting it under or waking it up
     // would be a lighting change with nothing behind it.
-    if (careBlocked()) return;
+    if (careBlocked()) { sfx::play(sfx::kDenied); return; }
     s_.lightsOff = !s_.lightsOff;
+    sfx::play(s_.lightsOff ? sfx::kSleep : sfx::kWake);
     // Sync to the SCHEDULE (not to lightsOff) so this manual choice holds until the
     // next window edge — otherwise waking it mid-window re-triggers auto-sleep.
     s_.lastSleepPhase = schedSleep() ? 1 : 0;
@@ -822,7 +880,27 @@ void Pet::cheatSetSpecies(int creatureIdx)
         s_.creatureId[sizeof(s_.creatureId) - 1] = '\0';
         s_.stage = c->tier;                            // keep trained mods / friendship (stat() re-clamps)
     }
+    applyVoice();
     markSaved();
+}
+
+Pet::ForceEvo Pet::cheatForceEvolve(char* nameOut, int n)
+{
+    const Creature* c = cur();
+    if (!c || c->evoCount == 0) return ForceEvo::Terminal;
+
+    // The ONLY gate skipped is the clock. Everything else -- which edge, and whether any edge
+    // qualifies at all -- comes from pickEvolution(), exactly as it does in tick().
+    const int target = pickEvolution();
+    if (target < 0) return ForceEvo::NotEligible;
+
+    evolveTo(target);   // stat reset, fresh stage timer, Nature re-roll, new voice, fanfare
+    if (nameOut && n > 0) {
+        const Creature* nc = cur();
+        snprintf(nameOut, (size_t)n, "%s", nc ? nc->name : "?");
+    }
+    markSaved();
+    return ForceEvo::Evolved;
 }
 
 void Pet::recordWin()  { if (s_.wins   != 0xFFFFFFFFu) s_.wins++; }

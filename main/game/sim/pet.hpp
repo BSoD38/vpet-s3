@@ -163,6 +163,11 @@ class Pet {
     bool      frozen_ = false;         // care freeze: the whole sim is suspended (see setFrozen)
 
     void newEgg();
+    // Tell the audio engine whose voice creature-voiced sounds should now use (see
+    // VoiceProfile in engine/audio/audio.hpp). Called from every path that moves idx_,
+    // because the alternative -- resolving the voice at each play() site -- would put the
+    // creature registry in front of every sound in the game.
+    void applyVoice() const;
     bool careBlocked();           // frozen? then refuse the care action and arm the "no" wiggle
     void applyBacklight() const;  // panel brightness for the current lights + freeze state
     int  pickEvolution() const;   // first eligible evolution edge (creature idx), or -1
@@ -228,6 +233,11 @@ public:
     // creature can't eat.
     void feed(const Food& f);
     bool canEat();                // false + arms the refusal wiggle when egg/asleep/sick
+    // Voice a refused care action. Public because a caller that pre-gates on canEat() (the
+    // home screen's Feed button) never reaches the action itself, and has to make the same
+    // noise the action would have -- otherwise the identical refusal is audible from the food
+    // picker and silent from the home screen.
+    void playRefusal() const;
     void clean();
     void heal();
     void toggleLights();
@@ -278,6 +288,26 @@ public:
     void cheatAdjustStat(StatId id, int delta); // nudge the trained modifier (clamped to 0..room)
     void cheatMaxStat(StatId id);               // set the modifier so the effective stat hits its cap
     void cheatSetSpecies(int creatureIdx);      // morph to any registry creature (keeps trained stats)
+
+    // Force the evolution the creature has ALREADY EARNED, skipping only the stage timer.
+    //
+    // Deliberately not a species swap. cheatSetSpecies() answers "make it a Greymon"; this
+    // answers "do the thing tick() would do once minStageSecs elapses" -- which means it walks
+    // the real edge list, so which branch it takes is decided by the stats, bond, wins and care
+    // mistakes the pet actually has. That is the whole point of it as a testing tool: it
+    // exercises the evolution PATH (branch choice, stat reset, Nature re-roll, the fanfare)
+    // rather than bypassing it, so a mod author can check that their gates route the way they
+    // intended without waiting out two real days per stage.
+    //
+    // Refusing is a real outcome, not a failure: a creature whose gates are all unmet has not
+    // earned anything yet, and silently inventing a target would make this a species swap with
+    // extra steps. `nameOut` receives the new species name on Evolved.
+    enum class ForceEvo : uint8_t {
+        Evolved,        // done -- nameOut holds the new species
+        Terminal,       // this creature has no outgoing edges at all
+        NotEligible,    // it has edges, but nothing currently satisfies one
+    };
+    ForceEvo cheatForceEvolve(char* nameOut, int n);
 
     // Apply a finished battle: write remaining HP% back to health, grant win/loss effects
     // (stats/friendship/happiness/W-L record) and roll exit-HP sickness. hpFrac = the player's

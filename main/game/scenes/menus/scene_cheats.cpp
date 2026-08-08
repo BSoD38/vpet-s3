@@ -23,10 +23,16 @@ static int  stat_row_y(int i) { return STAT_Y0 + i * STAT_PITCH; }
 static Rect stat_minus(int i) { return { MINUS_X, stat_row_y(i), SBW, STAT_BH }; }
 static Rect stat_plus (int i) { return { PLUS_X,  stat_row_y(i), SBW, STAT_BH }; }
 
-// max/zero + the species button (tapping it opens the scrolling picker)
-static const Rect MAX_BTN  { 16,  236, 100, 24 };
-static const Rect ZERO_BTN { 124, 236, 100, 24 };
-static const Rect SP_BTN   { 16,  268, GAME_W - 32, 28 };
+// max/zero, the species button (tapping it opens the scrolling picker), and force-evolve.
+// The bottom three rows keep a 4px gap == 2*TOUCH_SLOP, for the same reason the stat rows do:
+// slop-expanded hit boxes must not overlap into the row above or a tap lands on the wrong one.
+static const Rect MAX_BTN  { 16,  236, 100, 22 };
+static const Rect ZERO_BTN { 124, 236, 100, 22 };
+static const Rect SP_BTN   { 16,  262, GAME_W - 32, 26 };
+static const Rect EVO_BTN  { 16,  292, GAME_W - 32, 24 };
+
+// How long a force-evolve result stays on the button.
+static const float EVO_MSG_SECS = 2.5f;
 
 // picker: single-line rows, so a 200-slot modded roster is a couple of flicks tall
 static const int PICK_Y     = 52;
@@ -57,6 +63,12 @@ static bool species_before(const CreatureRegistry& reg, int a, int b)
 void SceneCheats::onEnter()
 {
     picking_ = false;   // never re-enter the scene with the picker still open
+    evoMsgT_ = 0.0f;    // a stale result from the last visit would be answering nothing
+}
+
+void SceneCheats::update(float dt)
+{
+    if (evoMsgT_ > 0.0f) evoMsgT_ -= dt;
 }
 
 void SceneCheats::render()
@@ -93,6 +105,13 @@ void SceneCheats::render()
     snprintf(sp, sizeof sp, "%s (T%u)", c.name, (unsigned)c.tier);
     SP_BTN.button(sp, col::card, col::white, 1);
     SP_BTN.outline(col::accent);
+
+    // --- force evolve ---
+    // Distinct colour from the species button on purpose: they sit next to each other and do
+    // very different things (earned branch vs arbitrary morph), so they should not read as a
+    // pair of ways to do the same thing.
+    if (evoMsgT_ > 0.0f) EVO_BTN.button(evoMsg_, evoMsgCol_, col::black, 1);
+    else                 EVO_BTN.button("FORCE EVOLVE", rgb565(150, 110, 60), col::white, 1);
 }
 
 void SceneCheats::renderPicker()
@@ -175,6 +194,29 @@ void SceneCheats::onInput(const Input& in)
     }
     if (ZERO_BTN.contains(in)) {
         for (int i = 0; i < SROW_N; i++) pet.cheatAdjustStat(SROWS[i].id, -2000000000);   // clamps to 0
+        return;
+    }
+
+    // force the earned evolution (skips only the stage timer -- see Pet::cheatForceEvolve)
+    if (EVO_BTN.contains(in)) {
+        char name[24] = {0};
+        switch (pet.cheatForceEvolve(name, sizeof name)) {
+            case Pet::ForceEvo::Evolved:
+                snprintf(evoMsg_, sizeof evoMsg_, "-> %s", name);
+                evoMsgCol_ = col::good;
+                break;
+            case Pet::ForceEvo::Terminal:
+                snprintf(evoMsg_, sizeof evoMsg_, "FINAL FORM");
+                evoMsgCol_ = col::dim;
+                break;
+            case Pet::ForceEvo::NotEligible:
+                // Not a failure: the pet has edges but has not met a gate, so there is nothing
+                // it has earned yet. Raise a stat or the bond and press again.
+                snprintf(evoMsg_, sizeof evoMsg_, "NO GATE MET");
+                evoMsgCol_ = col::warn;
+                break;
+        }
+        evoMsgT_ = EVO_MSG_SECS;
         return;
     }
 

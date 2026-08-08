@@ -17,6 +17,7 @@
     "sleepEnd": 6
   },
   "minStageSecs": 1000000000,
+  "voice": "blob",
   "sprite": "sprite.png",
   "evolutions": [],
   "id": "rollo"

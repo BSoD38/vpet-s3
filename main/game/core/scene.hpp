@@ -1,5 +1,6 @@
 #pragma once
 #include "engine/input.hpp"
+#include "engine/audio/sfx.hpp"   // the default music id lives with the other sound ids
 
 class App;   // scenes reach the game context (pet, gfx, scene switching) through this
 
@@ -30,6 +31,13 @@ public:
     // (normal). In-play scenes (minigame, battle) override this so a long, active session
     // doesn't starve/sadden the pet; the scaling is uniform, so aging/evolution slow too.
     virtual float careSpeed() const { return 1.0f; }
+
+    // Which music track plays while this scene is up, as a bank id (see sfx.hpp / bank.hpp).
+    // Default is the home theme, so a scene only says anything when it differs. App::setScene
+    // asks every scene this on the way in, which is why it is a property here rather than a
+    // list of scene ids in app.cpp: a new scene brings its own answer, and -- since the bank
+    // is data -- a mod-defined track becomes reachable without a firmware change.
+    virtual const char* musicId() const { return sfx::kMusicHome; }
 };
 
 // Care-sim speed while an "in-play" scene (minigame/battle) is active. 0 = frozen (no

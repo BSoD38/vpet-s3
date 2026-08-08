@@ -17,7 +17,6 @@ extern "C" {
 #include "Wireless.h"
 #include "BAT_Driver.h"
 #include "PWR_Key.h"
-#include "PCM5101.h"
 }
 
 static const char *TAG = "MAIN";
@@ -72,7 +71,8 @@ extern "C" void app_main(void)
     Driver_Init();                // PWR latch/key, battery, IMU, flash search, sensor task
     SD_Init();
     sdwatch_start();              // baseline = SD_Init's outcome; game loop halts on change
-    Audio_Init();
+    // NOTE: audio is brought up in App::init(), not here -- the mixer is useless until the
+    // mod packs are mounted and the sound bank has been scanned out of them.
 
     Display_Init();   // LovyanGFX: SPI + ST7789 panel, cleared to black
     LCD_Init();       // backlight on + touch (CST328/CST3530)

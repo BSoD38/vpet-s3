@@ -1,6 +1,9 @@
 dependencies:
   idf: ">=5.0"
-  chmorgan/esp-audio-player: "==1.0.7"
+  # Fixed-point MP3 decoder. Used DIRECTLY by game/engine/audio/mp3.cpp, which is the music
+  # path of the 4-voice mixer. (chmorgan/esp-audio-player, which used to sit on top of this,
+  # was removed: it owned the I2S channel and played one stream at a time -- see
+  # main/drivers/Audio_Driver/PCM5101.h.)
   chmorgan/esp-libhelix-mp3: "==1.0.3"
   espressif/cjson: "*"   # cJSON moved out of IDF core in 6.x; used to parse creature configs
 # LovyanGFX is vendored as a local component in components/LovyanGFX (auto-discovered).

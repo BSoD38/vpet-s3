@@ -65,6 +65,9 @@ main/
     core/     app, game, scene       — composition root, main loop, scene framework
     engine/   display, gfx, input,   — LovyanGFX device, back-buffer + draw helpers,
               clock, drivers           touch input, RTC clock, C-driver bridge
+      audio/  mixer, decoders,       — 4-voice software mixer owning the I2S DAC; WAV/MP3 and
+              synth, bank              MOD/XM/S3M/IT decode, chip synth, moddable sound bank
+                                       (docs/sound-engine.md)
     sim/      pet, creatures, save    — pet simulation, creature roster, NVS persistence
     scenes/   care/ minigames/ menus/ — game screens, grouped by kind
     assets/   sprites.hpp, tiles.hpp  — GENERATED baked bitmaps (see tools/)
@@ -74,7 +77,10 @@ art/          tiles/                  — SOURCE art (PNG) baked into headers by
 flash_creatures/  <id>/creature.json + sprite.png
               — base creature roster, packed into the `creatures` flash partition
 tools/        *.py                    — asset generators (see below)
-components/   LovyanGFX (submodule), chmorgan__esp-* (vendored audio)
+flash_gamedata/   foods/ natures/ personalities/ conversations/ sounds/
+              — base game data, packed into the `gamedata` partition as base.pak
+components/   LovyanGFX (submodule), chmorgan__esp-libhelix-mp3 (MP3),
+              libxmp-lite (tracker modules)
 ```
 
 Includes inside `game/` are folder-qualified from the `game/` root
@@ -108,6 +114,13 @@ clone to regenerate it.
 ## Dependencies
 
 - **LovyanGFX** — rendering. Git submodule at `components/LovyanGFX` (pinned v1.2.25).
-- **chmorgan/esp-audio-player, esp-libhelix-mp3** — audio, vendored in `components/`.
+- **chmorgan/esp-libhelix-mp3** — fixed-point MP3 decoder, vendored in `components/`. Used
+  directly by the sound engine's music path. (`esp-audio-player`, which used to sit on top of
+  it, was removed: it owned I2S and played one stream at a time — see
+  [docs/sound-engine.md](docs/sound-engine.md).)
+- **libxmp-lite** — tracker module playback (MOD/XM/S3M/IT), vendored **unmodified** in
+  [`components/libxmp-lite`](components/libxmp-lite/) (MIT, v4.7.2). Note that *full* libxmp is
+  LGPL because of third-party depackers; the lite subset is MIT, which is why that is the one
+  vendored. See its README for how to refresh the tree.
 - **espressif/cjson** — creature-config parsing. Managed component, fetched from
   `idf_component.yml` + `dependencies.lock` into `managed_components/` on first build.

@@ -24,6 +24,7 @@ public:
     void onInput(const Input& in) override;
     bool allowsSleep() const override { return false; }   // never nap mid-battle
     float careSpeed() const override { return IN_PLAY_CARE_SPEED; }  // care frozen while battling
+    const char* musicId() const override { return sfx::kMusicBattle; }
 
 private:
     enum class Ring { None, Attack, Parry };

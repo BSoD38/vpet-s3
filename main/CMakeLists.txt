@@ -16,6 +16,15 @@ idf_component_register(
                               "./game/engine/pakfs.cpp"
                               "./game/engine/sdwatch.cpp"
 
+                              # game: engine/audio (4-voice mixer, decoders, chip synth, bank)
+                              "./game/engine/audio/mixer.cpp"
+                              "./game/engine/audio/decoder.cpp"
+                              "./game/engine/audio/wav.cpp"
+                              "./game/engine/audio/mp3.cpp"
+                              "./game/engine/audio/synth.cpp"
+                              "./game/engine/audio/tracker.cpp"
+                              "./game/engine/audio/bank.cpp"
+
                               # game: sim (simulation state + persistence)
                               "./game/sim/pet.cpp"
                               "./game/sim/training.cpp"
@@ -51,8 +60,8 @@ idf_component_register(
                               "./game/scenes/menus/scene_journal.cpp"
                               "./game/scenes/menus/scene_rename.cpp"
 
-                              # vendor drivers (C)
-                              "./drivers/Audio_Driver/PCM5101.c"
+                              # vendor drivers (C). Audio_Driver is a pinout header only now --
+                              # its player was replaced by game/engine/audio, so there is no .c
                               "./drivers/LCD_Driver/ST7789.c"
                               "./drivers/Touch_Driver/esp_lcd_touch/esp_lcd_touch.c"
                               "./drivers/Touch_Driver/CST328.c"

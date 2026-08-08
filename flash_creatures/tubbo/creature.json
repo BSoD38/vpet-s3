@@ -17,6 +17,7 @@
     "sleepEnd": 7
   },
   "minStageSecs": 172800,
+  "voice": "blob",
   "sprite": "sprite.png",
   "evolutions": [
     {

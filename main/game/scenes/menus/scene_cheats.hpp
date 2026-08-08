@@ -18,8 +18,18 @@ class SceneCheats : public Scene {
     // must stay in load order -- saves and evolution edges address creatures by index.
     int16_t  order_[CreatureRegistry::MAX];
 
+    // Force-evolve result, shown ON the button itself for a couple of seconds. It needs to be
+    // said somewhere: the interesting outcomes are the ones where nothing visibly happens
+    // ("no gate is met yet", "this form is terminal"), and an unlabelled dead button reads as
+    // a broken one. The button is its own status line rather than a banner because this screen
+    // has no spare vertical space and the message only ever concerns this button.
+    char     evoMsg_[22] = {0};
+    float    evoMsgT_    = 0.0f;   // seconds remaining
+    uint16_t evoMsgCol_  = 0;
+
 public:
     void onEnter() override;
+    void update(float dt) override;
     void render() override;
     void onInput(const Input& in) override;
 

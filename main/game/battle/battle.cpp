@@ -204,7 +204,11 @@ void Battle::resolveAttack(int actor, Move m, float atkQ, float parryQ)
     if (dmg < CHIP) dmg = CHIP;
 
     emit(skill_class(atkQ), actor, 1 - actor, (int32_t)dmg, m);
-    emit(parryQ >= PARRY_OK_Q ? BattleEvent::ParryOk : BattleEvent::ParryMiss, 1 - actor, actor);
+    // Only when a parry was actually possible. A Special is unparryable and resolves with
+    // parryQ = 0, so emitting here called every special a failed parry -- an outcome for a
+    // window that never opened, which the scene then sounded.
+    if (m != Move::Special)
+        emit(parryQ >= PARRY_OK_Q ? BattleEvent::ParryOk : BattleEvent::ParryMiss, 1 - actor, actor);
 
     D.hp -= dmg;
     if (D.hp < 0) D.hp = 0;

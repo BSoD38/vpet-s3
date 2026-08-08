@@ -4,6 +4,7 @@
 #include "sim/creatures.hpp"
 #include "sim/personality.hpp"    // drift must ride along on headless catch-up
 #include "engine/display.hpp"     // display.sleep() / display.wakeup()
+#include "engine/audio/audio.hpp" // park the DAC before the power goes (see power_off)
 
 #include "esp_log.h"
 #include "esp_sleep.h"
@@ -148,6 +149,12 @@ void power_enter_deep_sleep(uint32_t interval_s)
 {
     ESP_LOGI(TAG, "deep sleep: %us timer + PWR-key wake", (unsigned)interval_s);
 
+    // Park the DAC before the power goes: cutting the I2S clock mid-waveform leaves a step on
+    // the output that the speaker clicks at. Owned here rather than by each caller, so the next
+    // one -- a low-battery cutoff, a watchdog reboot-to-sleep -- cannot forget it. A no-op
+    // before audio::init(), which is how the boot-time timer-wake path reaches this.
+    audio::shutdown();
+
     Backlight_Suspend(1);
     if (s_display_ready) display.sleep();
     vTaskDelay(pdMS_TO_TICKS(20));
@@ -175,6 +182,7 @@ void power_enter_deep_sleep(uint32_t interval_s)
 void power_off()
 {
     ESP_LOGI(TAG, "power off");
+    audio::shutdown();                // see power_enter_deep_sleep(): park the DAC first
     Shutdown();                       // battery: releases the latch -> board powers off here
     power_enter_deep_sleep(POWER_DEEP_POLL_S);   // USB fallback: sleep instead of a black brick
 }

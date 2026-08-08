@@ -1,0 +1,20 @@
+[
+  {
+    "_comment": "Agumon's own voice -- a small dinosaur, so lower and grainier than the",
+    "_comment2": "shared `beast` family it would otherwise use. Only the sounds worth making",
+    "_comment3": "specific are here; the rest fall through to beast_* and then to the base.",
+    "id": "_readme"
+  },
+
+  { "id": "pet_happy", "rtttl": "AguY:d=16,o=5,b=180:e,g,4c6", "wave": "saw",
+    "release": 0.06, "vibHz": 6, "vibCents": 20, "vol": 0.46, "pitchVar": 0.04 },
+  { "id": "pet_sad",   "wave": "saw",      "freq": 233, "ms": 420, "slide": 0.6,
+    "attack": 0.015, "release": 0.13, "vibHz": 4, "vibCents": 45, "vol": 0.44 },
+  { "id": "eat",       "wave": "pulse",    "freq": 196, "ms": 52, "duty": 0.18,
+    "slide": 0.76, "release": 0.03, "vol": 0.46, "pitchVar": 0.14 },
+  { "id": "hit",       "wave": "saw",      "freq": 330, "ms": 90, "slide": 0.4,
+    "release": 0.05, "vol": 0.5, "pitchVar": 0.1 },
+  { "id": "evolve",    "rtttl": "AguEvo:d=16,o=4,b=150:c,e,g,c5,e5,g5,8c6,8p,4c6",
+    "wave": "saw", "release": 0.07, "vibHz": 5, "vibCents": 18, "vol": 0.58,
+    "priority": 240 }
+]

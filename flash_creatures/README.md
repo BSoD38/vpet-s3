@@ -49,6 +49,10 @@ creatures/
   },
 
   "minStageSecs": 172800,    // min time as this creature before it may evolve (real seconds @1x)
+
+  "voice": "beast",          // voice family for its own sounds: beast/machine/spirit/blob
+  "voicePitch": 1.05,        // OPTIONAL override; omitted = derived from tier + a hash of the id
+
   "sprite": "sprite.png",    // sprite filename in this folder
 
   "evolutions": [            // outgoing branches, checked TOP-DOWN; first one that qualifies wins
@@ -61,6 +65,30 @@ creatures/
 Every field is optional except that a creature with no `id` falls back to its folder
 name. Missing numbers default to `0` (and `poopIntervalS`/`minStageSecs` default to
 "never"). Omit a field to accept its default.
+
+### `voice` and `voicePitch`
+
+How the creature *sounds*. Leaving both out is fine and is the normal case: `voicePitch`
+is derived from the tier and a hash of the id, so a creature has a distinct voice the
+moment it exists, and `voice` only matters if you want it to use an authored family
+(`beast`, `machine`, `spirit`, `blob`, or one your mod pack defines).
+
+For a creature with sounds **of its own**, add a `sounds/` folder next to `creature.json`:
+
+```
+creatures/
+  agumon/
+    creature.json
+    sheet.png
+    sounds/
+      sounds.json      # or just drop pet_happy.wav / eat.wav in here
+```
+
+Ids inside need no prefix — `pet_happy` in Agumon's folder *is* Agumon's `pet_happy`. It
+supports everything the game's own `sounds.json` does, anything you leave out falls through
+to the voice family and then to the base game, and nothing in the folder costs any memory
+while that creature is not on screen. So a pack can ship a thousand creatures each with its
+own voice. See [docs/sound-engine.md](../docs/sound-engine.md#creature-voices).
 
 ### `tier` values
 

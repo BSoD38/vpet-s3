@@ -4,6 +4,9 @@
 #include "engine/fw_update.hpp"  // fw_confirm_running_image (post-update rollback cancel)
 #include "engine/pakfs.hpp"      // base.pak + SD mod packs, mounted before the registries scan
 #include "engine/sdwatch.hpp"    // mid-session SD card yank/insert detection
+#include "engine/audio/audio.hpp"
+#include "engine/audio/bank.hpp" // bank_load (the sound registry, scanned like foods/creatures)
+#include "engine/audio/sfx.hpp"
 #include "ui/widgets.hpp"        // Rect (card-change halt screen button)
 #include "esp_system.h"          // esp_restart (card-change halt screen)
 #include "esp_timer.h"
@@ -115,6 +118,15 @@ static void halt_for_missing_species(App& app, const char* id)
 [[noreturn]] static void halt_for_card_change(App& app, bool inserted, bool screenOff)
 {
     if (screenOff) power_exit_light();   // change arrived during screen-off light sleep
+
+    // Audio dies with the card, and FIRST. Everything else SD-flavoured is boot-time state that
+    // simply stops being consulted, but the sound engine has two live tasks that keep running:
+    // one holding open file handles on a filesystem that no longer exists, and one still mixing.
+    // A module loaded from the card is fully resident in PSRAM, so without this it would happily
+    // play on through the halt screen and into the reboot -- which is what made the card look
+    // like it was still there.
+    audio::shutdown();
+
     app.pet.markSaved();
     ESP_LOGW("GAME", "SD card %s mid-session: halting for restart",
              inserted ? "inserted" : "removed");
@@ -167,6 +179,12 @@ static ConvContext conv_ctx(const Pet& pet, const PersonalityTracker& drift)
 
 void App::setScene(SceneId id, Slide slide)
 {
+    // Navigation feedback lives HERE, not in the 19 scenes that call setScene: the slide
+    // direction already encodes what happened (Forward = going deeper, Back = returning), so
+    // one place gets every screen right and no new scene can forget to be audible.
+    if (slide == Slide::Forward || slide == Slide::Iris) sfx::play(sfx::kSelect);
+    else if (slide == Slide::Back)                       sfx::play(sfx::kBack);
+
     // Freeze the current (outgoing) scene before swapping, then animate the new
     // one sliding in over the next TRANS_DUR seconds.
     if (slide != Slide::None) {
@@ -196,6 +214,13 @@ void App::setScene(SceneId id, Slide slide)
         case SceneId::Journal:  scenes.set(&journal);  break;
         case SceneId::Rename:   scenes.set(&rename);   break;
     }
+
+    // Music follows the scene, decided here for the same reason the navigation sounds are:
+    // one place that every screen already goes through. WHICH track is the scene's own answer
+    // (Scene::musicId), so this does not become a second switch to keep in step with the one
+    // above. audio::music() ignores a request for the track already playing, so navigating
+    // between the care screens does not restart it.
+    if (Scene* s = scenes.current()) audio::music(s->musicId());
 }
 
 void App::init()
@@ -227,6 +252,13 @@ void App::init()
     gamedata_mount();                 // idempotent; registries call it again harmlessly
     pakfs_mount_all(GAMEDATA_ROOT);   // base.pak  -> /pak0
     pakfs_mount_all("/sdcard/mods");  // user mods -> /pak1..
+
+    // Audio comes up here, ahead of pet.boot(), so hatching a first egg is audible. The
+    // mixer is inert until the bank has content, and a failed init() just leaves every
+    // play() a silent no-op -- sound must never be able to stop the game from starting.
+    audio::init();
+    audio::settings_load(save);       // master/music/sfx volumes + mute, from NVS
+    audio::bank_load();               // named sounds: gamedata, then packs, then loose SD
 
     creatures.loadAll();              // load the creature roster before the pet resolves its id
     foods.loadAll();                  // food list (independent of the pet; needed by the Feed picker)
@@ -287,8 +319,15 @@ void App::runLoop()
         // (minigame/battle) slow or freeze the pet sim so a session doesn't neglect it.
         float  careMult     = cs ? cs->careSpeed() : 1.0f;
         switch (power_.update(touchAct, sleepAllowed, now)) {
-            case PowerAction::EnterLight: power_enter_light(); break;
-            case PowerAction::ExitLight:  power_exit_light();  break;
+            // Screen off means nobody is listening, and the I2S clock alone is worth a few
+            // mA on a device that runs for days. shutdown() before the two paths that do not
+            // return parks the DAC at silence -- cutting its clock mid-waveform leaves a step
+            // on the output that the speaker clicks at.
+            case PowerAction::EnterLight: audio::suspend(); power_enter_light(); break;
+            case PowerAction::ExitLight:  power_exit_light(); audio::resume();   break;
+            // The audio teardown belongs to the sleep/off entry points themselves (power.cpp),
+            // not to this switch: they are the ones that must not cut the I2S clock
+            // mid-waveform, and a future caller of theirs will not know to do it here.
             case PowerAction::EnterDeep:  pet.markSaved(); power_enter_deep_sleep(); break;   // no return
             case PowerAction::PowerOff:   pet.markSaved(); power_off();               break;  // no return
             case PowerAction::None:       break;
@@ -359,6 +398,17 @@ void App::runLoop()
             ESP_LOGI("MEM", "free internal %u KB, psram %u KB",
                      (unsigned)(heap_caps_get_free_size(MALLOC_CAP_INTERNAL) / 1024),
                      (unsigned)(heap_caps_get_free_size(MALLOC_CAP_SPIRAM) / 1024));
+            // Audio, but only when there is something to say. `underruns` is the number that
+            // matters: it counts blocks where a streaming voice went dry, which is the one
+            // signal separating "the card can't keep up" from "that file is broken" -- and it
+            // belongs in the log rather than only behind a settings page, because nobody goes
+            // looking for a diagnostic they don't yet know they need.
+            // This is the one reader that clears the peak, so the window it reports is exactly
+            // the log interval -- a debug overlay reading the same counter cannot flatten it.
+            const audio::Stats as = audio::stats(true);
+            if (as.activeVoices || as.underruns)
+                ESP_LOGI("AUDIO", "%u voices, %u streams, %u underruns, mix peak %u us",
+                         as.activeVoices, as.activeStreams, as.underruns, as.mixPeakUs);
         }
 
         vTaskDelay(1);

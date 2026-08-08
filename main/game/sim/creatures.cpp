@@ -58,6 +58,33 @@ static uint8_t parse_attribute(cJSON* o)
     return ATTR_FREE;
 }
 
+// Default voice pitch for a creature that does not state one (see Creature::voicePitch).
+//
+// Tier picks the band -- a hatchling is small and squeaky, a Mega is big and slow -- and a
+// hash of the id spreads creatures WITHIN their band, so two Champions are not the same
+// creature wearing a different sprite. The hash is what makes this worth doing at all: a
+// table alone would give every creature of a tier one identical voice, which reads as a bug
+// rather than as a design.
+//
+// Deterministic and derived, never stored: the same creature sounds the same on every boot
+// and on every device, and an imported roster gets its voices without anyone editing 700
+// files. An author who disagrees writes "voicePitch" and this is skipped entirely.
+static float default_voice_pitch(const char* id, uint8_t tier)
+{
+    // Indexed by LifeStage (egg, in-training I/II, child, champion, ultimate, mega, mega+).
+    // The egg is 1.0 because it barely speaks, and the hatch fanfare already belongs to the
+    // creature coming OUT of it.
+    static const float BAND[] = { 1.00f, 1.45f, 1.32f, 1.18f, 1.05f, 0.94f, 0.84f, 0.76f };
+    const float band = BAND[tier < (sizeof BAND / sizeof BAND[0]) ? tier : 0];
+
+    uint32_t h = 2166136261u;                       // FNV-1a over the id
+    for (const char* p = id; p && *p; p++) { h ^= (uint8_t)*p; h *= 16777619u; }
+    const float spread = ((float)(h % 1000u) / 1000.0f - 0.5f) * 0.12f;   // +/-6%
+
+    const float v = band * (1.0f + spread);
+    return v < 0.5f ? 0.5f : (v > 2.0f ? 2.0f : v);
+}
+
 uint16_t attr_color(uint8_t a)
 {
     switch (a) {
@@ -214,6 +241,14 @@ bool CreatureRegistry::parseFile(const char* path, Creature& c)
     c.sleepEnd      = (uint8_t)gd_num(needs, "sleepEnd",   0);
 
     c.minStageSecs = (float)gd_num(root, "minStageSecs", 1e9);
+
+    // Voice. "voice" names an authored family and is optional; "voicePitch" overrides the
+    // derived default and is rarer still. Derived AFTER the id is read, since the id is half
+    // of what the default is made from.
+    gd_str(root, "voice", c.voiceFamily, sizeof c.voiceFamily, "");
+    c.voicePitch = (float)gd_num(root, "voicePitch", 0.0);
+    if (c.voicePitch <= 0.0f) c.voicePitch = default_voice_pitch(c.id, c.tier);
+
     gd_str(root, "sprite", c.spriteFile, sizeof c.spriteFile, "sprite.png");
     int frames = (int)gd_num(root, "frames", 1);
     if (frames != 1 && frames != FRM_COUNT) {
@@ -277,6 +312,7 @@ void CreatureRegistry::scanRoot(const char* root, const char* srcTag)
             c.id[sizeof(c.id) - 1] = '\0';
         }
         snprintf(c.spritePath, sizeof c.spritePath, "%s/%s", dir, c.spriteFile);
+        snprintf(c.dir,        sizeof c.dir,        "%s",    dir);
 
         int idx = upsert(c.id);
         if (idx < 0) { ESP_LOGW(TAG, "registry full; dropped '%s'", c.id); continue; }
@@ -341,6 +377,7 @@ void CreatureRegistry::addBuiltinEgg()
     c.tier = 0;
     c.minStageSecs = 120.0f;
     c.poopIntervalS = 1e9f;
+    c.voicePitch = 1.0f;                           // memset left it 0, which is not a pitch
     c.evoCount = 0;                                // can't evolve without data files
 
     // No baked sprite: c.frames[] stays null (from memset) and spritePath is empty, so

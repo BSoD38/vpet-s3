@@ -3,6 +3,7 @@
 #include "core/app.hpp"
 #include "engine/gfx.hpp"
 #include "engine/util.hpp"      // clampf, randf
+#include "engine/audio/sfx.hpp"
 #include "sim/creatures.hpp"
 #include "esp_random.h"         // battle seed
 #include <cstring>
@@ -10,6 +11,25 @@
 
 // Scene lifecycle, combat orchestration and effect spawning. All rendering lives in
 // scene_battle_draw.cpp; shared constants in scene_battle_internal.hpp.
+
+// The voice of one side of the fight (see VoiceProfile in engine/audio/audio.hpp). Battle is
+// the only place in the game where two creatures are on screen at once, so it is the only
+// place that has to say whose cry a sound is: left to the default, an enemy taking a hit
+// would answer in the player's own voice, which reads as the PLAYER being hit.
+//
+// The returned profile points into the registry, which outlives every use of it here.
+static audio::VoiceProfile voice_of(CreatureRegistry& reg, const Combatant& c)
+{
+    audio::VoiceProfile v;
+    if (c.spriteIdx >= 0 && c.spriteIdx < reg.count()) {
+        const Creature& cr = reg.at(c.spriteIdx);
+        v.species = cr.id;
+        v.family  = cr.voiceFamily;
+        v.dir     = cr.dir;
+        v.pitch   = cr.voicePitch;
+    }
+    return v;
+}
 
 // Pick an opponent from the registry nearest a target tier (excluding the egg and the
 // player's own species); random among the nearest tier for variety.
@@ -62,6 +82,13 @@ void SceneBattle::buildCombatants()
     battle_.begin(p, e, esp_random());
     battle_.setAuto(0, false);
     battle_.setAuto(1, true);
+
+    // Get the opponent's own sounds loading now, during the intro, rather than letting the
+    // first hit trigger the load and answer in the shared voice while it arrives.
+    {
+        const Creature& ec = reg.at(enemyIdx);
+        audio::request_voice(ec.id, ec.dir);
+    }
 
     for (int i = 0; i < 2; i++) {
         float hp = (float)battle_.side(i).hp;
@@ -192,6 +219,18 @@ void SceneBattle::drainEvents()
             case BattleEvent::Glance: {
                 bool sp = (ev.move == Move::Special);
                 uint8_t kind = sp ? 3 : (ev.type == BattleEvent::Crit ? 1 : ev.type == BattleEvent::Glance ? 2 : 0);
+                // Impact weight follows the visuals: a special or a crit gets the bigger
+                // sound, a glancing blow the same sound played back softer. Voiced as the
+                // creature being HIT, not the one swinging -- an impact sound is a reaction,
+                // and it is the target the popup, the flash and the shake all belong to too.
+                audio::Params ip;
+                audio::VoiceProfile tv = voice_of(app().creatures, battle_.side(ev.target));
+                ip.voice = &tv;
+                if (sp || ev.type == BattleEvent::Crit) audio::play(sfx::kCrit, ip);
+                else {
+                    ip.gain = (ev.type == BattleEvent::Glance) ? 0.45f : 1.0f;
+                    audio::play(sfx::kHit, ip);
+                }
                 spawnPopup(ev.target, ev.amount, kind);
                 flash_[ev.target] = (ev.type == BattleEvent::Glance) ? FLASH_DUR * 0.6f : FLASH_DUR;
                 if (sp) {
@@ -204,8 +243,25 @@ void SceneBattle::drainEvents()
                 }
                 break;
             }
+            // A parry outcome is emitted for the DEFENDER of every attack, including the
+            // enemy's when the player is the one attacking. These two sounds are feedback on
+            // the PLAYER'S timing, so they only make sense for the player's own parries --
+            // unfiltered, a landed hit came with the enemy's "miss" whoosh over the top of it,
+            // and against a high-skill enemy the player heard their own success sting for
+            // every attack they made.
+            case BattleEvent::ParryOk:
+                if (ev.actor == 0) sfx::play(sfx::kParry);
+                break;
+            case BattleEvent::ParryMiss:
+                if (ev.actor == 0) sfx::play(sfx::kMiss);
+                break;
             case BattleEvent::Dodge: {   // fully evaded (perfect parry + AGI)
                 uint16_t ec = rgb565(150, 230, 255);
+                // ev.actor is whoever dodged, and the same event means opposite things to the
+                // player: their own dodge is the success sting, the enemy slipping their
+                // attack is a whiff. (The visuals already read from ev.actor; only the sound
+                // was saying "well done" for both.)
+                sfx::play(ev.actor == 0 ? sfx::kParry : sfx::kMiss);
                 setJudge("DODGE!", ec);
                 spawnShock(ev.actor, ec);
                 spawnParticles(ev.actor, 10, ec);
@@ -301,6 +357,9 @@ void SceneBattle::update(float dt)
         const Combatant& p = battle_.side(0);
         float hpFrac = p.maxHp ? (float)p.hp / (float)p.maxHp : 0.0f;
         bool won = battle_.winner() == 0;
+        // Fanfare over the top of the battle track rather than after it: the result screen
+        // is the payoff, and waiting out a fade would put the sting in the wrong place.
+        sfx::play(won ? sfx::kWin : sfx::kLose);
         outcome_ = app().pet.applyBattleResult(won, hpFrac);
         if (mode_ == BattleMode::Tower) {   // advance on win, drop to last checkpoint on loss
             int next = won ? towerFloor_ + 1 : ((towerFloor_ - 1) / 5) * 5 + 1;

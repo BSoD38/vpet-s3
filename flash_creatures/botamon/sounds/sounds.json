@@ -1,0 +1,21 @@
+[
+  {
+    "_comment": "Botamon's own voice. Ids here need NO prefix -- inside a creature folder,",
+    "_comment2": "`pet_happy` IS this creature's pet_happy. Anything not defined here falls",
+    "_comment3": "through to its voice family (blob) and then to the base game, so a set is",
+    "_comment4": "never obliged to be complete. Loaded when Botamon starts speaking and",
+    "_comment5": "dropped when it stops: see docs/sound-engine.md.",
+    "id": "_readme"
+  },
+
+  { "id": "pet_happy", "rtttl": "BotaY:d=32,o=6,b=200:c7,e7,g7,e7", "wave": "sine",
+    "attack": 0.004, "release": 0.06, "vol": 0.46, "pitchVar": 0.05 },
+  { "id": "pet_sad",   "wave": "sine",     "freq": 880, "ms": 300, "slide": 0.42,
+    "attack": 0.01, "release": 0.12, "vibHz": 5, "vibCents": 30, "vol": 0.42 },
+  { "id": "eat",       "wave": "sine",     "freq": 740, "ms": 40, "slide": 0.62,
+    "release": 0.05, "vol": 0.38, "pitchVar": 0.18 },
+  { "id": "refuse",    "wave": "sine",     "freq": 988, "ms": 90, "repeat": 2,
+    "gapMs": 30, "step": 0.7, "release": 0.06, "vol": 0.44 },
+  { "id": "hatch",     "rtttl": "BotaHi:d=32,o=6,b=190:g,c7,e7,g7,8e7", "wave": "sine",
+    "attack": 0.006, "release": 0.09, "vol": 0.52, "priority": 220 }
+]

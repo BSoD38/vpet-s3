@@ -61,10 +61,34 @@ struct Creature {
     float    hungerPerHr, happyPerHr, poopIntervalS;
     uint8_t  sleepStart, sleepEnd;
     float    minStageSecs;       // min time as this creature before it may evolve
+
+    // --- voice (see docs/sound-engine.md) --------------------------------------------------
+    // How this creature SOUNDS, in the two cheapest possible pieces. Neither costs any audio
+    // content, which is the point: a roster imported by the hundred cannot be given hundreds
+    // of hand-authored cries, and one where only the favourites have a voice sounds worse than
+    // one where none do.
+    //
+    // `voiceFamily` names a shared set of authored sounds ("beast", "machine"): a creature-
+    // voiced id like `pet_happy` resolves to `<id>_pet_happy`, then `<voiceFamily>_pet_happy`,
+    // then plain `pet_happy`, so a handful of families cover everything and a single creature
+    // can still be given a cry of its own. Empty = fall straight through to the base sound.
+    //
+    // `voicePitch` is the scalar that does the heavy lifting. A synthesised cry played slower
+    // is also lower and longer, so one number per creature turns one sound into a whole roster
+    // of them. Defaulted from tier plus a hash of the id when creature.json omits it, so every
+    // creature has a distinct voice whether or not anyone ever authored one for it.
+    char     voiceFamily[16];
+    float    voicePitch;
+
     EvoEdge  evos[MAX_EVOS];
     uint8_t  evoCount;
     char     spriteFile[24];     // sprite filename from the config (e.g. "sheet.png")
     char     spritePath[104];    // resolved absolute path to the sprite (flash or SD)
+    // The folder this creature was loaded from, resolved (flash, a pak, or SD). Kept because a
+    // creature's assets are not only its sprite: `<dir>/sounds/` is its own sound set, loaded on
+    // demand when it starts speaking (see docs/sound-engine.md). Storing the folder rather than
+    // re-deriving it from spritePath means a creature with no art still has a voice.
+    char     dir[104];
     uint8_t  frameCount;         // 1 (single pose) or 16 (4x4 DMC sheet)
     LGFX_Sprite* frames[FRM_COUNT];  // decoded frames in PSRAM (lazy; null until shown / after eviction)
     uint32_t spriteTick;         // LRU timestamp of last access (for eviction)

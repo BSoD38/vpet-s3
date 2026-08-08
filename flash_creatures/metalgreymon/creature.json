@@ -17,6 +17,7 @@
     "sleepEnd": 6
   },
   "minStageSecs": 345600,
+  "voice": "machine",
   "sprite": "sheet.png",
   "frames": 16,
   "evolutions": [
