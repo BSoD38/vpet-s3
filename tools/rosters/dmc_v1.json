@@ -62,7 +62,7 @@
       "tier": 4, "attribute": "vaccine",
       "base": { "hp": 260, "str": 30, "end": 22, "agi": 18, "int": 16 },
       "needs": { "hungerPerHr": 14, "happyPerHr": 12, "poopIntervalS": 10800, "sleepStart": 22, "sleepEnd": 6 },
-      "minStageSecs": 259200,
+      "minStageSecs": 1209600,
       "evolutions": [ { "to": "metalgreymon", "minWins": 15 } ]
     },
     {
@@ -70,7 +70,7 @@
       "tier": 4, "attribute": "virus",
       "base": { "hp": 230, "str": 24, "end": 16, "agi": 26, "int": 24 },
       "needs": { "hungerPerHr": 13, "happyPerHr": 11, "poopIntervalS": 10800, "sleepStart": 1, "sleepEnd": 9 },
-      "minStageSecs": 259200,
+      "minStageSecs": 1209600,
       "evolutions": [ { "to": "metalgreymon", "minWins": 15 } ]
     },
     {
@@ -78,7 +78,7 @@
       "tier": 4, "attribute": "vaccine",
       "base": { "hp": 220, "str": 22, "end": 14, "agi": 34, "int": 20 },
       "needs": { "hungerPerHr": 13, "happyPerHr": 12, "poopIntervalS": 10800, "sleepStart": 22, "sleepEnd": 6 },
-      "minStageSecs": 259200,
+      "minStageSecs": 1209600,
       "evolutions": [ { "to": "metalgreymon", "minWins": 15 } ]
     },
     {
@@ -86,7 +86,7 @@
       "tier": 4, "attribute": "data",
       "base": { "hp": 240, "str": 26, "end": 20, "agi": 16, "int": 14 },
       "needs": { "hungerPerHr": 14, "happyPerHr": 12, "poopIntervalS": 10800, "sleepStart": 21, "sleepEnd": 6 },
-      "minStageSecs": 259200,
+      "minStageSecs": 1209600,
       "evolutions": [ { "to": "mamemon", "minWins": 15 } ]
     },
     {
@@ -94,7 +94,7 @@
       "tier": 4, "attribute": "data",
       "base": { "hp": 225, "str": 28, "end": 15, "agi": 22, "int": 18 },
       "needs": { "hungerPerHr": 13, "happyPerHr": 12, "poopIntervalS": 10800, "sleepStart": 22, "sleepEnd": 6 },
-      "minStageSecs": 259200,
+      "minStageSecs": 1209600,
       "evolutions": [ { "to": "mamemon", "minWins": 15 } ]
     },
     {
@@ -102,7 +102,7 @@
       "tier": 4, "attribute": "data",
       "base": { "hp": 235, "str": 23, "end": 18, "agi": 24, "int": 16 },
       "needs": { "hungerPerHr": 13, "happyPerHr": 12, "poopIntervalS": 10800, "sleepStart": 22, "sleepEnd": 6 },
-      "minStageSecs": 259200,
+      "minStageSecs": 1209600,
       "evolutions": [ { "to": "mamemon", "minWins": 15 } ]
     },
     {
@@ -110,7 +110,7 @@
       "tier": 4, "attribute": "virus",
       "base": { "hp": 180, "str": 14, "end": 12, "agi": 14, "int": 10 },
       "needs": { "hungerPerHr": 10, "happyPerHr": 14, "poopIntervalS": 5400, "sleepStart": 23, "sleepEnd": 8 },
-      "minStageSecs": 259200,
+      "minStageSecs": 1209600,
       "evolutions": [ { "to": "monzaemon", "minWins": 15 } ]
     },
     {
@@ -118,7 +118,7 @@
       "tier": 5, "attribute": "virus",
       "base": { "hp": 520, "str": 55, "end": 42, "agi": 30, "int": 32 },
       "needs": { "hungerPerHr": 15, "happyPerHr": 12, "poopIntervalS": 10800, "sleepStart": 22, "sleepEnd": 6 },
-      "minStageSecs": 345600,
+      "minStageSecs": 3628800,
       "evolutions": [ { "to": "blitzgreymon", "minWins": 40 } ]
     },
     {
@@ -134,7 +134,7 @@
       "tier": 5, "attribute": "vaccine",
       "base": { "hp": 550, "str": 45, "end": 50, "agi": 22, "int": 30 },
       "needs": { "hungerPerHr": 15, "happyPerHr": 13, "poopIntervalS": 10800, "sleepStart": 21, "sleepEnd": 7 },
-      "minStageSecs": 345600,
+      "minStageSecs": 3628800,
       "evolutions": [ { "to": "shinmonzaemon", "minWins": 40 } ]
     },
     {

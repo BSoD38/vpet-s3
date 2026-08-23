@@ -15,9 +15,10 @@ migration path so updates preserve players' pets instead of resetting them.
 
 ## Economy — money / shop / items
 
-Currency earned from battles (and other activities), a shop, and item drops. Battle rewards
-were deliberately scoped to *stat gain + friendship + win count* for v1; money is deferred to
-this system.
+**Moved out — designed in [economy-and-inventory.md](economy-and-inventory.md).** Currency
+(**Bits**), a shop, an inventory, toys, room decor and the wish/gift loop that ties the bag to
+the conversation system. Battle rewards stay scoped to *stat gain + friendship + win count*;
+Bits are added to them in phase E1.
 
 ## Multi-creature ownership / teams
 

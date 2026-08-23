@@ -16,6 +16,8 @@ the card ends up looking like:
     <SD root>/foods/honey_drop/food.json
     <SD root>/foods/treat/food.json
     <SD root>/conversations/player/v2_mod_pack.json
+    <SD root>/items/bounce_ball/item.json
+    <SD root>/items/...                (3 items -- see note 6)
 
 Insert the card BEFORE powering on -- the card is mounted once during boot.
 
@@ -45,6 +47,31 @@ WHAT IT DEMONSTRATES
 5. SD CONVERSATION PACKS. conversations/player/v2_mod_pack.json holds TWO conversations in one
    file (a JSON array). Packs work identically in flash and on SD; a mod may ship one pack for a
    whole campaign, or one file per conversation, whichever it prefers.
+
+6. ITEMS -- INERT FOR NOW. items/ holds three fixtures for the economy system, one per item kind
+   that mods will care about: a toy (bounce_ball, which carries personality drift the way a food
+   does), a decor piece (paper_lantern, claiming the "feature" room slot) and a medicine
+   (soothing_salve, with "treats": "injured" -- treatment is a priced item from E1 onward, so a
+   mod can add its own remedy without the engine knowing its name).
+   NOTHING READS THESE YET -- ItemRegistry arrives in economy phase E1, see
+   docs/economy-and-inventory.md. They are here so the overlay can be tested the day it lands,
+   and so the schema has a worked example. Until then they are simply ignored: an unknown folder
+   costs nothing, in a loose tree or inside a .pak.
+
+   foods/ already carries live economy data, though: honey_drop is "uncommon" at 35 Bits and the
+   Deluxe Treat override is "rare" at 60, which makes both useful test cases for the rarity-based
+   stock rotation in the shop.
+
+
+EVOLUTION TIMING (IMPORTANT WHEN TESTING)
+-----------------------------------------
+The ladder was re-paced -- see docs/evolution-pacing.md. Champion now takes 2 WEEKS and Ultimate
+6 WEEKS, where both used to be 3-4 days. This mod's creatures follow the same table, so
+birdramon / kabuterimon / angemon / whamon sit at 2 weeks and metalmamemon at 6.
+
+If you are testing evolution branches, do NOT wait for them. Menu > Settings > Cheats has a
+species cycler and a force-evolve that walks the real edge list, so branch gates can be exercised
+without waiting out two real weeks per stage.
 
 
 WHAT TO LOOK FOR

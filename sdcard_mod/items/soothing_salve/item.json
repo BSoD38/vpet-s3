@@ -1,0 +1,13 @@
+{
+  "id": "soothing_salve",
+  "name": "Soothing Salve",
+  "kind": "care",
+  "treats": "injured",
+  "desc": "Smells of pine. Takes the sting out.",
+  "tags": ["care", "herbal"],
+
+  "color": "#5fae7a",
+
+  "cost": 45,
+  "rarity": "common"
+}

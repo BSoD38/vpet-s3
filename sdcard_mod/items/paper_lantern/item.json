@@ -1,0 +1,13 @@
+{
+  "id": "paper_lantern",
+  "name": "Paper Lantern",
+  "kind": "decor",
+  "slot": "feature",
+  "desc": "Warm light, slightly crooked.",
+  "tags": ["decor", "warm"],
+
+  "color": "#f2c76b",
+
+  "cost": 900,
+  "rarity": "uncommon"
+}

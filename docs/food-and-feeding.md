@@ -5,7 +5,8 @@ converts the game's biggest duty into a channel for self-expression — with no 
 exist primarily to give the personality system ([conversations-and-personality.md](conversations-and-personality.md))
 something to read, and secondarily to make the care loop less mechanical.
 
-Related: the deferred economy that will eventually gate food supply lives in [roadmap.md](roadmap.md).
+Related: the economy that gates flavoured-food supply is designed in
+[economy-and-inventory.md](economy-and-inventory.md).
 
 ---
 
@@ -20,9 +21,12 @@ Related: the deferred economy that will eventually gate food supply lives in [ro
 3. **Effects read from theme, never from numbers.** A spicy pod obviously reads as fiery; a warm
    herbal mash reads as calming. Drift is deliberately hidden (personality §2.6) — printing "+brave"
    would let players min-max their creature's identity directly and kill the mystery.
-4. **Self-limiting instead of scarce.** Until the economy lands, foods are unlimited; overusing one
-   is punished by the *simulation* (sweets → weight and sickness pressure; no variety → poorer health)
-   rather than by stock. You still cannot spam the best-feeling food.
+4. **Self-limiting first, scarce second.** Overusing a food is punished by the *simulation* (sweets →
+   weight and sickness pressure; no variety → poorer health) rather than by stock — that mechanism
+   carries the rule on its own, and it still applies to free kibble. The economy adds stock only on
+   top of it, and only for **flavoured** foods: `cost: 0` (kibble) stays unlimited forever, because
+   money must never stand between the player and a fed creature
+   ([economy-and-inventory.md](economy-and-inventory.md) rule 1).
 
 ## 2. The starter set
 
@@ -63,8 +67,10 @@ Foods are data-driven and SD-moddable, exactly like creatures:
 }
 ```
 
-`cost` and `rarity` are **reserved and ignored in v1**. They exist now so that gating food behind the
-economy later is a behaviour change only — no schema break, and no mod file has to be rewritten.
+`cost` and `rarity` were reserved and ignored in v1, and are **live from economy phase E1** — exactly
+as planned, a behaviour change with no schema break and no mod file rewritten. `cost: 0` is the free
+rule: that food is unlimited and never stocked, which is how kibble stays free without a special case
+in code.
 
 **`tags` matter for modding robustness.** Preferences may reference a food id *or* a tag, so a creature
 that "likes sweets" automatically likes a sweet food added by a mod it has never heard of. Without
@@ -100,6 +106,10 @@ The single Feed action becomes a small food picker (built with `Rect`/`ListView`
 preference). It must be laid out so a **stock count per row** can appear later without a redesign —
 that is the only forward-compatibility the UI needs for the economy.
 
+From economy phase E1 that stock count is live: priced foods show a count and grey out at zero, and a
+zero row offers **buy one now, inline** when the player can afford it, so running dry never means a
+trip to the shop mid-feed. Free (`cost: 0`) foods show no count at all.
+
 Feeding while hunger is already high remains an **overfeeding deviation** regardless of which food is
 chosen, carrying the indulgent drift from personality §2.3.
 
@@ -132,7 +142,8 @@ outcomes, since two distinct foods now reach it reliably.
 
 ## 8. Deferred
 
-- **Economy gating** — cost, stock, shops, drops (`cost`/`rarity` already reserved above).
+- ~~**Economy gating** — cost, stock, shops, drops~~ — **designed**:
+  [economy-and-inventory.md](economy-and-inventory.md) §3. Item *drops* remain deferred.
 - Cooking / recipes / combining ingredients.
 - Food-driven evolution branches (a diet-gated `EvoEdge` condition).
 - Per-food eating animations and sounds.

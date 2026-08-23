@@ -1,0 +1,18 @@
+{
+  "id": "bounce_ball",
+  "name": "Bounce Ball",
+  "kind": "toy",
+  "desc": "Never lands where you expect.",
+  "tags": ["toy", "loud"],
+
+  "happiness": 8,
+  "color": "#e04b3a",
+
+  "drift": {
+    "energetic": 0.6,
+    "wild": 0.4
+  },
+
+  "cost": 380,
+  "rarity": "common"
+}

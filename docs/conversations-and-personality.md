@@ -156,12 +156,18 @@ timescale is days.
 | Trigger | Status |
 | --- | --- |
 | **Evolution** — if accumulated drift strongly contradicts the current Nature, it shifts | **v1** |
-| Special items (nature-shift keepsakes) | Deferred with the item/economy system |
+| Special items (nature-shift keepsakes) | **Dropped** — see below |
 | Special one-shot story events | Later |
 | Death | Parked — no death mechanic exists in the game |
 
 Evolution is therefore the practical Nature-jump window in v1: it rewards a long, consistent way of
 playing rather than a single action.
+
+The nature-shift keepsake was **considered and dropped** when the economy was designed: an item that
+buys a Nature contradicts the sentence above, which is the whole reason evolution is the jump window.
+The economy sells an *evolution catalyst* instead — it skips the stage timer and lets the ordinary
+re-evaluation happen, so it buys timing rather than identity
+([economy-and-inventory.md](economy-and-inventory.md) §10).
 
 ### 2.6 Visibility
 
@@ -450,7 +456,9 @@ Both pages need a scrolling list (§8, Phase 0).
 Conversations are a **payoff**, not a friendship farm — mostly happiness and small friendship, so
 they don't undercut the evolution gates and battle-reward pacing that also spend friendship.
 **One-shot story beats** are the exception: bigger friendship, occasional stat boosts, and unlocking
-further conversations. Item rewards are deferred with the economy system.
+further conversations. **Item rewards** land with economy phase E4, along with the gates and effects
+that let a conversation see the player's bag, ask for something and remember being given it
+([economy-and-inventory.md](economy-and-inventory.md) §8–§9).
 
 ---
 
@@ -470,7 +478,9 @@ further conversations. Item rewards are deferred with the economy system.
 ## 9. Deferred
 
 - Free-typed player answers + interpolating them into dialogue.
-- Item rewards and nature-shift items (with the economy system).
+- ~~Item rewards and nature-shift items~~ — **designed**: item rewards, `hasItem`/`wish`/`minBits`
+  gates and the wish→gift loop are economy phase E4
+  ([economy-and-inventory.md](economy-and-inventory.md)). Nature-shift items were dropped (§2.5).
 - Death as a Nature-change trigger (no death mechanic exists).
 - Voice/SFX per personality; per-species conversation art.
 - ~~A Python lint tool for mod authors~~ — **built**: [`tools/conv_lint.py`](../tools/conv_lint.py)

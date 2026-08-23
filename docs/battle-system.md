@@ -34,7 +34,7 @@ Battle and care **feed each other**: HP is spent in fights and recovered through
 | Stakes (loss) | Friendship ↓, happiness ↓, **HP → 1%**; sickness roll then near-certain |
 | Types | **Vaccine → Data → Virus → Vaccine** triangle, ~±25% |
 | Balance | Moderate skill band; **hard tier wall** via stat-differential + MAXHP range |
-| Rewards (win) | Small stat gain, friendship ↑, `wins++` (evolution gate). Money: later (roadmap) |
+| Rewards (win) | Small stat gain, friendship ↑, `wins++` (evolution gate). Bits: phase E1 of [economy-and-inventory.md](economy-and-inventory.md) |
 | Modes (v1) | **Quick Battle** (random similar-tier foe) + **Tower** (climbing ladder) |
 | Architecture | Event-emitting core over a `Combatant` abstraction |
 
@@ -148,7 +148,8 @@ Classic Digimon: **Vaccine beats Data, Data beats Virus, Virus beats Vaccine.** 
 - **Rewards mirror the existing minigame pattern** (`SceneRun::award()`, granted once on
   finish): **win** → small stat gain via `Pet::trainStat()`, a `Pet::addFriendship()` bump,
   `recordWin()` (feeds evolution gates). **Loss** → friendship ↓, happiness ↓, HP→1%,
-  `recordLoss()`. **Money/item drops: deferred** to the economy system ([roadmap.md](roadmap.md)).
+  `recordLoss()`. **Bits** are paid on a win in phase E1 of [economy-and-inventory.md](economy-and-inventory.md)
+  (40–60, uncapped — battle wins are rare enough to need no daily limit). Item drops stay deferred.
 
 ## Modes (v1)
 
@@ -263,8 +264,9 @@ play on hardware in parallel).
 - **Additional modes:** boss raids, tournaments, survival/endless, daily challenges.
 - **Richer movesets / elemental sub-types** on top of the attribute triangle.
 
-*Non-battle future systems — economy/money, multi-creature ownership, wild encounters, and the
-save-migration system — live in [roadmap.md](roadmap.md).*
+*The economy is designed in [economy-and-inventory.md](economy-and-inventory.md). Other non-battle
+future systems — multi-creature ownership, wild encounters, and the save-migration system — live
+in [roadmap.md](roadmap.md).*
 
 ## Open tuning knobs / TBD
 
