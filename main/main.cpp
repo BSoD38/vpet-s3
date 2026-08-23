@@ -1,6 +1,7 @@
 #include "engine/display.hpp"   // C++ (LovyanGFX)
 #include "engine/power.hpp"     // sleep/power boot-path helpers
 #include "engine/sdwatch.hpp"   // mid-session SD card yank/insert watcher
+#include "engine/battery.hpp"   // charge gauge + charger detection (fed by the driver task)
 #include "core/game.hpp"
 #include "sim/save.hpp"
 #include "esp_log.h"
@@ -30,6 +31,10 @@ static void Driver_Loop(void *parameter)
         QMI8658_Loop();
         PCF85063_Loop();
         BAT_Get_Volts();
+        // The gauge lives on this task rather than in the game loop because plug-in
+        // detection wants an even sample interval, which a frame-rate-driven caller
+        // cannot promise (and a minigame frame drop must not read as a voltage step).
+        battery_poll(0.1f);
         vTaskDelay(pdMS_TO_TICKS(100));
     }
 }

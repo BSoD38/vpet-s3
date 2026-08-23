@@ -26,13 +26,18 @@ static uint32_t days_from_civil(int y, unsigned m, unsigned d)
     return (uint32_t)(era * 146097 + (int)doe - 719468);
 }
 
-uint32_t clock_now(void)
+uint32_t clock_epoch(const datetime_t& t)
 {
-    datetime_t t = read_stable();   // torn-read-safe snapshot of the RTC global
-    if (t.year < 1970 || t.month < 1 || t.month > 12 || t.day < 1 || t.day > 31)
+    if ((int)t.year < CLOCK_YEAR_MIN || t.month < 1 || t.month > 12 || t.day < 1 || t.day > 31)
         return 0;
     uint32_t days = days_from_civil((int)t.year, t.month, t.day);
     return days * 86400u + (uint32_t)t.hour * 3600u + (uint32_t)t.minute * 60u + t.second;
+}
+
+uint32_t clock_now(void)
+{
+    datetime_t t = read_stable();   // torn-read-safe snapshot of the RTC global
+    return clock_epoch(t);
 }
 
 uint32_t clock_elapsed(uint32_t since)

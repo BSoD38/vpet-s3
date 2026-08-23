@@ -1,0 +1,114 @@
+[
+  {
+    "id": "life/slow_morning",
+    "title": "A slower pace",
+    "priority": 30,
+    "repeatable": true,
+    "when": { "life": "elderly", "hourMin": 7, "hourMax": 11 },
+    "start": "n0",
+    "nodes": [
+      {
+        "id": "n0",
+        "text": "I used to be everywhere at once, didn't I. These days the morning takes me a while. I don't mind it.",
+        "choices": [
+          {
+            "text": "Take all the time you need",
+            "to": "slow",
+            "effects": { "friendship": 3, "happiness": 4, "drift": { "energetic": -0.3 } }
+          },
+          {
+            "text": "You're still quick where it counts",
+            "to": "quick",
+            "effects": { "friendship": 3, "happiness": 5, "drift": { "brave": 0.2 } }
+          }
+        ]
+      },
+      { "id": "slow", "text": "Mornings are better slow anyway. You see more of them." },
+      { "id": "quick", "text": "Ha. Watch me. ...In a minute. Watch me in a minute." }
+    ]
+  },
+  {
+    "id": "life/remember_small",
+    "title": "When I was small",
+    "priority": 50,
+    "when": { "life": "elderly", "minFriendship": 3000 },
+    "start": "n0",
+    "nodes": [
+      {
+        "id": "n0",
+        "text": "I was thinking about when I was small. You didn't know what I'd become. You stayed anyway.",
+        "choices": [
+          {
+            "text": "I'd stay all over again",
+            "to": "again",
+            "effects": { "friendship": 6, "happiness": 6 }
+          },
+          {
+            "text": "You grew up well",
+            "to": "grew",
+            "effects": { "friendship": 5, "happiness": 5 }
+          }
+        ]
+      },
+      { "id": "again", "text": "I know. That's the thing about you. I've always known.", "to": "end0" },
+      { "id": "grew", "text": "I had help. I remember all of it, you know. Every meal. Every game.", "to": "end0" },
+      { "id": "end0", "text": "Anyway. An old creature gets to say these things. That's the one good trade." }
+    ]
+  },
+  {
+    "id": "life/twilight_sit",
+    "title": "Soft edges",
+    "priority": 45,
+    "repeatable": true,
+    "when": { "life": "twilight" },
+    "start": "n0",
+    "nodes": [
+      {
+        "id": "n0",
+        "text": "Everything feels soft at the edges today. Not bad. Just soft. Sit with me a little?",
+        "choices": [
+          {
+            "text": "I'm right here",
+            "to": "here",
+            "effects": { "friendship": 4, "happiness": 5, "drift": { "social": 0.2, "wild": -0.2 } }
+          },
+          {
+            "text": "As long as you want",
+            "to": "long",
+            "effects": { "friendship": 4, "happiness": 6 }
+          }
+        ]
+      },
+      { "id": "here", "text": "Good. You don't have to say anything. This is the part I like." },
+      { "id": "long", "text": "Careful. I might want a very long time." }
+    ]
+  },
+  {
+    "id": "life/twilight_thanks",
+    "title": "The one thing",
+    "priority": 60,
+    "when": { "life": "twilight", "minFriendship": 5000 },
+    "start": "n0",
+    "nodes": [
+      {
+        "id": "n0",
+        "text": "I want to say one thing while it's easy to say. Whatever happens, whenever it happens -- I was glad it was you.",
+        "choices": [
+          {
+            "text": "It was always going to be me",
+            "to": "always",
+            "effects": { "friendship": 8, "happiness": 6 }
+          },
+          {
+            "text": "Don't talk like that",
+            "to": "dont",
+            "effects": { "friendship": 5, "happiness": 3 }
+          }
+        ]
+      },
+      { "id": "always", "text": "Yes. I think it was. Alright. That's all -- I just wanted it said.", "to": "end0" },
+      { "id": "dont", "text": "I'm not being sad about it. I'm being accurate. There's a difference.", "to": "end0" },
+      { "id": "end0", "text": "Now. What were we doing today? I'm not done with today." }
+    ]
+  }
+]

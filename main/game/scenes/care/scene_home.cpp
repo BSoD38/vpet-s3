@@ -5,7 +5,7 @@
 #include "ui/widgets.hpp"
 #include "sim/creatures.hpp"        // Creature (current sprite)
 #include "engine/clock.hpp"            // clock_datetime (torn-read-safe RTC snapshot)
-#include "engine/drivers.hpp"          // BAT_analogVolts
+#include "engine/battery.hpp"          // battery_state (gauge + charger detection)
 #include "assets/sprites.hpp"   // spr_unknown_data (fallback sprite)
 #include "assets/tiles.hpp"     // grass_tile / dirt_tile (ground)
 #include "esp_random.h"
@@ -32,15 +32,27 @@ static const int WALK_MARGIN = 6;
 static const int   ACT_N  = 4;
 static const int   ACT_W  = 52, ACT_H = 52, ACT_GAP = 5, ACT_X0 = 8, ACT_Y = 260;
 static const int   MB_X   = 204, MB_Y = 4, MB_W = 32, MB_H = 24;   // visible button
-// Battery icon, top row: right-aligned into the gap between the name and the menu button
-// (body + terminal nub end at x185, clear of MENU_HIT below), vertically centered on the
-// size-2 name text.
-static const int   BAT_X  = 160, BAT_Y = 9, BAT_W = 22, BAT_H = 11;
-// The gauge is latched on this interval instead of following the ADC. The driver already
-// filters the reading (drivers/BAT_Driver), but a battery is a slow thing and the icon is
-// coarse -- 18px of fill, so ~5% per pixel -- and a level that moves at all on its own reads
-// as broken. Anything under a minute of drift is invisible at this size.
-static const float BAT_REFRESH = 15.0f;   // seconds between re-reads
+// HUD row 2, split by what it is about: the CREATURE on the left (the HP gauge) and the
+// DEVICE on the right (battery, then the clock hard against the right margin, under the menu
+// button it lines up with). The gap between the two groups is the point -- it keeps a glance
+// at the pet's health from landing on the clock. The clock used to sit on the grass and the
+// battery on the name row; moving both here gives the name the whole of row 1 and clears the
+// creature's sky of text.
+static const int   ROW2_Y = 30;                 // top of the row-2 text and the HP bar
+static const int   HP_X   = 6;                  // "HP" label
+static const int   HPB_X  = 24, HPB_W = 72;     // the gauge itself (no number: the bar IS the
+                                                // readout, and exact health is on the Stats sheet)
+static const int   CLK_X  = 204;                // "HH:MM" at size 1 is 30px -> ends at x234
+// Battery body + terminal nub run BAT_X..BAT_X+25, one pixel taller than the text either
+// side, so it is seated a row above them to share a centre line.
+static const int   BAT_X  = 170, BAT_Y = ROW2_Y - 1, BAT_W = 22, BAT_H = 11;
+// The charging bolt sits in the gap to the LEFT of the icon rather than inside the 18x7 fill
+// area, where it would have needed an outline to stay legible over both the filled and the
+// empty half. The gap is kept clear WHETHER OR NOT the bolt is showing -- a layout that
+// reflowed every time the charger came and went would be worse than one empty notch.
+static const int   BOLT_X = BAT_X - 10, BOLT_Y = BAT_Y + 5;
+// The name now has row 1 to itself, up to the menu button's touch strip.
+static const int   NAME_W = 182;
 // Touch target = the top-right corner strip ABOVE the stat bars (bars start at
 // y29). Kept generous in x but capped so that even with TOUCH_SLOP the hit box tops out at
 // y28 (h + slop = 27 + 2) and never reaches the HAP bar.
@@ -79,11 +91,6 @@ static uint16_t bar_color(float v01)
     return v01 < 0.30f ? col::warn : col::good;
 }
 
-// Li-ion 3.0V (empty) .. 4.2V (full), linear -- crude, but the icon has 18px of fill.
-static int battery_pct()
-{
-    return (int)clampf((BAT_analogVolts - 3.0f) / (4.2f - 3.0f) * 100.0f, 0.0f, 100.0f);
-}
 
 // A small stacked "poop" with a dark outline so it reads against the brown ground.
 static void draw_poop(int x, int y)
@@ -127,19 +134,30 @@ static void icon_heal(int x, int y)                    // medical cross
     fb.fillRect(x - 3, y - 10, 6, 20, g);
     fb.fillRect(x - 10, y - 3, 20, 6, g);
 }
+// Lightning bolt, centred on (x,y): the "a charger is attached" marker. The board gives the
+// MCU no charge-status line, so this is driven by engine/battery.cpp reading the plug-in out
+// of the voltage -- see there for what that can and cannot see.
+static void icon_bolt(int x, int y, uint16_t c)
+{
+    fb.fillTriangle(x + 2, y - 5, x - 3, y + 1, x + 1, y + 1, c);
+    fb.fillTriangle(x - 2, y + 5, x + 3, y - 1, x - 1, y - 1, c);
+}
+
 // Battery as a status-bar glyph: outlined body + terminal nub, with a fill whose width and
 // colour track the charge (green / amber / red). Reads at a glance and costs a fifth of the
 // width the old "BAT nn%" text did; the exact figure lives in the debug overlay.
-static void icon_battery(int x, int y, int pct)
+static void icon_battery(int x, int y, int pct, bool charging)
 {
-    const uint16_t fgc = pct <= 20 ? col::warn
-                       : pct <= 50 ? rgb565(235, 150, 60)
-                                   : col::good;
+    const uint16_t fgc = charging     ? col::good
+                       : pct <= 20    ? col::warn
+                       : pct <= 50    ? rgb565(235, 150, 60)
+                                      : col::good;
     fb.drawRoundRect(x, y, BAT_W, BAT_H, 2, col::white);
     fb.fillRect(x + BAT_W, y + BAT_H / 2 - 2, 3, 5, col::white);   // terminal nub
     int inner = BAT_W - 4;                                         // 2px inset inside the frame
-    int fill  = (inner * pct + 50) / 100;
+    int fill  = (inner * (pct < 0 ? 0 : pct) + 50) / 100;          // pct < 0 = no reading yet
     if (fill > 0) fb.fillRect(x + 2, y + 2, fill, BAT_H - 4, fgc);
+    if (charging) icon_bolt(BOLT_X, BOLT_Y, col::accent);
 }
 
 static void icon_lights(int x, int y, bool asleep, uint16_t bg)  // moon (asleep) / sun (awake)
@@ -167,14 +185,6 @@ void SceneHome::update(float dt)
     t_ += dt;
     if (pokeTarget_ == 0) pokeTarget_ = 3 + (int)(esp_random() % 4);   // this run needs 3..6 pokes
 
-    // Battery: sampled on a slow timer (immediately on the first frame), so the gauge steps
-    // between settled readings instead of tracking the ADC.
-    batTimer_ -= dt;
-    if (batPct_ < 0 || batTimer_ <= 0.0f) {
-        batTimer_ = BAT_REFRESH;
-        batPct_   = battery_pct();
-    }
-
     // Petting zone tracks the creature's actual sprite size (feet-anchored baseline) and
     // FOLLOWS it along the ground -- otherwise you would be rubbing empty grass. Still no
     // bob applied: the box stays vertically stable so a rub can't be shaken off it. The x
@@ -189,7 +199,7 @@ void SceneHome::update(float dt)
     int hzW = psw / 2 + PET_HIT_MARGIN, hzH = psh / 2 + PET_HIT_MARGIN;
     bool onPetZone = Rect{ bodyCx - hzW, bodyCy - hzH, hzW * 2, hzH * 2 }.contains(tx_, ty_);
     const bool frozen = pet.frozen();           // care freeze: nothing here reaches the creature
-    bool interactive = p.stage != STAGE_EGG && !p.lightsOff && !p.sick && !frozen;
+    bool interactive = p.stage != STAGE_EGG && !p.lightsOff && !pet.touchBlocked() && !frozen;
     bool overPet = interactive && onPetZone;    // can actually pet/poke
     overPet_ = overPet;
     rubbingNow_ = false;
@@ -198,7 +208,18 @@ void SceneHome::update(float dt)
 
     // Pose layers: sim state drives the persistent base; short-lived events overlay it.
     anim_.tick(dt);
-    anim_.setBase(p.lightsOff ? Anim::Nap : p.sick ? Anim::Sick : Anim::Idle);
+    // Any ailment (sick, injured, convalescing) shows the Sick pose -- there is no per-
+    // condition art, and "unwell" is the message that matters at a glance.
+    anim_.setBase(p.lightsOff ? Anim::Nap : pet.conditionBlocked() ? Anim::Sick : Anim::Idle);
+    // Aged gait (docs/death-and-lifespan.md §4): stretching the footfall period is the one
+    // lever that slows the walk coherently -- ground travel derives from the step phase
+    // (engine/walk.hpp), so gait and speed slow together. Presentation only, by design.
+    {
+        LifeTrack lt = pet.lifeTrack();
+        const VitalsTuning& T = vitals_tuning();
+        anim_.setStepSecs(ANIM_STEP_SECS * (lt == LIFE_TWILIGHT ? T.twilightStepMult
+                                          : lt == LIFE_ELDERLY  ? T.elderlyStepMult : 1.0f));
+    }
     if (pet.checkAte()) anim_.react(Anim::Eat, 2.4f);   // fed from SceneFeed; play it on arrival
 
     // "no" wiggle: refused from the menu (e.g. feed while sick), or from touching a sick pet
@@ -207,7 +228,7 @@ void SceneHome::update(float dt)
     // Sick, or paused: either way the touch goes nowhere, and a shake says so. (Pet::play()
     // would arm the same wiggle, but overPet is already false in both cases, so it is never
     // reached -- this is the branch that actually answers a finger on the creature.)
-    if (justPressed && onPetZone && (p.sick || frozen)) refuse();
+    if (justPressed && onPetZone && (pet.touchBlocked() || frozen)) refuse();
     // An UPSET creature won't be touched (PetMood): refuse at first contact and never arm a
     // gesture, so no rub ring appears and no bond can be farmed from a refusing creature.
     // (Food is still accepted -- that's the way back.)
@@ -445,17 +466,18 @@ void SceneHome::render()
         fb.fillCircle(cx + 4,  cy - 52, 3, spark);
     }
 
-    // status markers
-    if (p.sick)      gfx_text(clamp_left(cx - 20, 48), cy - 42, 2, col::warn, "SICK");
+    // status markers ("SICK"/"VERY SICK"/"HURT"/... -- see condition_marker)
+    if (const char* cm = pet.conditionMarker())
+        gfx_text(clamp_left(cx - 20, (int)strlen(cm) * 12), cy - 42, 2, col::warn, "%s", cm);
     if (p.lightsOff) gfx_text(clamp_left(cx + 20, 36), cy - 36, 2, col::white, "Zzz");
 
     // Speech bubble: the creature has something to say. Deliberately PERSISTENT -- it doesn't
     // time out and vanish, so the payoff for a high bond can't be missed by looking away.
     // Sits to the RIGHT of the head (the attention badge takes the left), and the rect is
     // stashed for onInput since it moves with the sprite's height.
-    // The debug overlay (drawn last) owns y48..86 when enabled; the bubble and the badge
+    // The debug overlay (drawn last) owns y48..98 when enabled; the bubble and the badge
     // must clamp BELOW it or they'd be painted over while their hit-rects kept eating taps.
-    const int cueMinY = app().debugOverlay ? 90 : 48;
+    const int cueMinY = app().debugOverlay ? 102 : 48;
 
     // Hidden while frozen as well as while asleep: a conversation moves bond, mood and
     // personality, so offering one would contradict the pause. It keeps its place and is
@@ -509,19 +531,21 @@ void SceneHome::render()
     // there and in the debug overlay below via Settings > Debug info.
     // The panel is sized to what's left (name + HP + battery), so no empty band remains.
     fb.fillRect(0, 0, GAME_W, 44, col::panel);
-    // The name is player-set, so it's fitted to the space left of the battery icon rather
-    // than trusted to be short (a 16-char nickname used to run under the menu button).
-    gfx_text_fit(6, 6, BAT_X - 12, 2, col::accent, "%s", pet.displayName());
+    // The name is player-set, so it's fitted to the row rather than trusted to be short (a
+    // 16-char nickname used to run under the menu button).
+    gfx_text_fit(6, 6, NAME_W, 2, col::accent, "%s", pet.displayName());
 
-    icon_battery(BAT_X, BAT_Y, batPct_);   // update() seeds this before the first render
+    gfx_text(HP_X, ROW2_Y, 1, col::white, "HP");
+    gfx_bar(HPB_X, ROW2_Y - 1, HPB_W, 9, p.health / 100.0f,
+            bar_color(p.health / 100.0f), col::black, col::dim);
 
-    gfx_text(6, 28, 1, col::white, "HP");
-    gfx_bar(26, 27, 72, 9, p.health / 100.0f, bar_color(p.health / 100.0f), col::black, col::dim);
-    gfx_text(102, 28, 1, col::dim, "%d", (int)p.health);
+    // Straight from the shared gauge: engine/battery.cpp already filters the ADC and rate-
+    // limits the percentage, so there is nothing left here for a scene-local latch to steady.
+    const BatteryState bat = battery_state();
+    icon_battery(BAT_X, BAT_Y, bat.pct, bat.charging);
 
-    datetime_t dt = clock_datetime();   // consistent snapshot (no torn h:m:s)
-    gfx_text(6, HORIZON + 12, 1, col::white, "%02d:%02d:%02d",
-             dt.hour, dt.minute, dt.second);
+    datetime_t dt = clock_datetime();   // consistent snapshot (no torn h:m)
+    gfx_text(CLK_X, ROW2_Y, 1, col::white, "%02d:%02d", dt.hour, dt.minute);
 
     // Caption for the freeze, above the (fully greyed) action bar. Says where to undo it:
     // Settings is three taps away and there is no other route back.
@@ -536,7 +560,7 @@ void SceneHome::render()
         int bx = act_x(i);
         // Frozen greys the WHOLE bar: every one of these refuses, and a button that looks
         // live but only ever answers with the "no" wiggle is worse than an honest one.
-        bool blocked = frozen || (i == 0 && (p.sick || p.lightsOff));   // no feeding while sick/asleep
+        bool blocked = frozen || (i == 0 && (pet.foodBlocked() || p.lightsOff));   // no feeding while sick/asleep
         uint16_t bg = blocked ? rgb565(46, 42, 46) : col::panel;
         act_rect(i).fill(bg, 7);
         int ix = bx + ACT_W / 2, iy = ACT_Y + 18;
@@ -560,12 +584,13 @@ void SceneHome::render()
     // runtime debug overlay (toggle in Settings): touch internals + sim state.
     // Drawn over the sky just below the HUD (above the pet) so it clips nothing.
     if (app().debugOverlay) {
-        fb.fillRect(0, 48, GAME_W, 38, rgb565(0, 0, 0));
+        fb.fillRect(0, 48, GAME_W, 50, rgb565(0, 0, 0));
         gfx_text(4, 50, 1, col::good, "down%d over%d act%d xy%d,%d w%d%s",
                  down_, overPet_, touchActive_, tx_, ty_,
                  (int)walk_.x(), !walk_.walking() ? "." : walk_.facingRight() ? ">" : "<");
-        gfx_text(4, 62, 1, col::good, "prog%.0f/%d dist%.0f mv%.1f bat%.2fV",
-                 rubProgress_, (int)PET_CHUNK_DIST, rubDist_, lastMove_, BAT_analogVolts);
+        gfx_text(4, 62, 1, col::good, "prog%.0f/%d dist%.0f mv%.1f %.2fV%s",
+                 rubProgress_, (int)PET_CHUNK_DIST, rubDist_, lastMove_, bat.volts,
+                 bat.charging ? "+" : "-");
         // exact care values live here now that the HUD shows coarse states. The speed field
         // doubles as the freeze readout -- the line is already the full 240px wide, and a
         // frozen sim has no meaningful multiplier to report.
@@ -575,6 +600,11 @@ void SceneHome::render()
         gfx_text(4, 74, 1, col::good, "hr%d slp%d stg%.0f%% %s hun%.0f hap%.0f hp%.0f",
                  pet.simHour(), pet.isSleepTime(), pet.stageProgress() * 100.0f,
                  sp, p.hunger, p.happiness, p.health);
+        // life meter internals (docs/death-and-lifespan.md): pool, trailing neglect
+        // average, condition + minutes it has held (drives escalation)
+        gfx_text(4, 86, 1, col::good, "vit%.0f ema%.2f cond%u t%.0fm",
+                 pet.vitals().vitality, pet.vitals().careEma,
+                 p.cond, pet.vitals().condSecs / 60.0f);
     }
 }
 

@@ -36,6 +36,7 @@
 #include "CST3530.h"
 
 extern esp_lcd_touch_handle_t tp;
+extern const char *Touch_Model;   // "CST328" / "CST3530" / "none" (set by LCD_Init)
 extern uint8_t LCD_Backlight;
 
 void Backlight_Init(void);           // init LEDC backlight (called by LCD_Init)

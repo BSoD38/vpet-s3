@@ -129,6 +129,7 @@ void FoodRegistry::scanPack(const char* root, const char* srcTag)
         int idx = upsert(f.id);
         if (idx < 0) { ESP_LOGW(TAG, "registry full; dropped '%s'", f.id); continue; }
         list_[idx] = f;
+        if (gd_src_is_sd(srcTag)) gd_sd_loaded(GD_FOODS);
         ESP_LOGI(TAG, "%s(pack): '%s' (%s) fills %d", srcTag, f.id, f.name, (int)f.fills);
     }
     cJSON_Delete(arr);
@@ -166,6 +167,7 @@ void FoodRegistry::scanRoot(const char* root, const char* srcTag)
         int idx = upsert(f.id);
         if (idx < 0) { ESP_LOGW(TAG, "registry full; dropped '%s'", f.id); continue; }
         list_[idx] = f;                            // append or override (SD wins)
+        if (gd_src_is_sd(srcTag)) gd_sd_loaded(GD_FOODS);
         ESP_LOGI(TAG, "%s: '%s' (%s) fills %d", srcTag, f.id, f.name, (int)f.fills);
     }
     closedir(d);

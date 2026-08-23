@@ -16,6 +16,26 @@ struct cJSON;
 // usable. Safe to call from every registry's loadAll().
 bool gamedata_mount();
 
+// --- loose-SD mod accounting -------------------------------------------------------------
+// Every data-driven system reads the same three layers: base content in flash, .pak mod packs
+// from the card, then LOOSE FILES on the card as the final override. The loose layer is the
+// one a player edits by hand -- and the one that silently does nothing when a folder name is
+// wrong, the JSON is malformed or the card didn't mount. So each loader reports what it
+// actually took from it, and the About screen adds the numbers up. That is the whole
+// mechanism: a counter bumped where an entry is accepted, nothing threaded through anything.
+enum GdSystem : unsigned char {
+    GD_CREATURES, GD_FOODS, GD_NATURES, GD_TRAITS, GD_SOUNDS, GD_CONFIG, GD_SYS_COUNT
+};
+
+void        gd_sd_loaded(GdSystem s, int n = 1);   // n more entries accepted from loose SD files
+int         gd_sd_count(GdSystem s);      // entries this system took from loose SD files
+int         gd_sd_total();                // ...across all of them
+const char* gd_sd_name(GdSystem s);       // display label ("Creatures", "Foods", ...)
+
+// Do the scan tags the loaders already pass around for logging mean "loose SD"? Keeps the
+// one string compare in a single place rather than at every call site.
+bool        gd_src_is_sd(const char* srcTag);
+
 // --- shared JSON-loading helpers -------------------------------------------------------
 // Every data-driven registry (foods, personalities, conversations) reads whole JSON files
 // and picks typed fields out of cJSON objects. These are THE shared implementations: the

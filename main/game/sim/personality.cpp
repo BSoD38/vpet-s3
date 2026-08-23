@@ -150,6 +150,7 @@ void PersonalityRegistry::scanNatures(const char* dir, const char* srcTag)
             idx = natures_++;
         }
         nat_[idx] = n;                              // append or override (SD wins)
+        if (gd_src_is_sd(srcTag)) gd_sd_loaded(GD_NATURES);
         ESP_LOGI(TAG, "%s nature: '%s' (%s)", srcTag, n.id, n.name);
     });
 }
@@ -188,6 +189,7 @@ void PersonalityRegistry::scanTraits(const char* dir, const char* srcTag)
                 idx = traits_++;
             }
             tr_[idx] = t;
+            if (gd_src_is_sd(srcTag)) gd_sd_loaded(GD_TRAITS);
             ESP_LOGI(TAG, "%s trait: '%s' (%s) of %s", srcTag, t.id, t.name, t.natureId);
         }
     });

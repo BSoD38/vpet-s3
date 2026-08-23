@@ -31,6 +31,46 @@ void gfx_init()
     fb.setTextWrap(false);
 }
 
+void gfx_fade(float k)
+{
+    if (k <= 0.0f) return;
+    uint16_t* px = (uint16_t*)fb.getBuffer();
+    if (!px) return;
+    const int n = GAME_W * GAME_H;
+    if (k >= 1.0f) { memset(px, 0, (size_t)n * 2); return; }
+
+    // The sprite's IN-MEMORY byte order isn't promised by the API (see the scaled-copy
+    // cache, which hit the same wall): detect it once by round-tripping a known color
+    // through drawPixel and reading the raw buffer back.
+    static int swapped = -1;
+    if (swapped < 0) {
+        uint16_t keep = px[0];
+        fb.drawPixel(0, 0, (uint16_t)0xF800u);
+        swapped = (px[0] != 0xF800u) ? 1 : 0;
+        px[0] = keep;
+    }
+
+    // Per-channel multiply via two tiny LUTs (5-bit red/blue share one). Rebuilt per call:
+    // 96 multiplies against 76,800 pixel transforms is noise.
+    const int m = (int)((1.0f - k) * 256.0f + 0.5f);
+    uint8_t l5[32], l6[64];
+    for (int i = 0; i < 32; i++) l5[i] = (uint8_t)((i * m) >> 8);
+    for (int i = 0; i < 64; i++) l6[i] = (uint8_t)((i * m) >> 8);
+
+    if (swapped) {
+        for (int i = 0; i < n; i++) {
+            uint16_t v = (uint16_t)__builtin_bswap16(px[i]);
+            v = (uint16_t)((l5[(v >> 11) & 31] << 11) | (l6[(v >> 5) & 63] << 5) | l5[v & 31]);
+            px[i] = (uint16_t)__builtin_bswap16(v);
+        }
+    } else {
+        for (int i = 0; i < n; i++) {
+            uint16_t v = px[i];
+            px[i] = (uint16_t)((l5[(v >> 11) & 31] << 11) | (l6[(v >> 5) & 63] << 5) | l5[v & 31]);
+        }
+    }
+}
+
 void gfx_present()
 {
     fb.pushSprite(0, 0);

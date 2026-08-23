@@ -1,10 +1,10 @@
 #pragma once
 #include "core/scene.hpp"
 
-// Settings: three tabbed pages. GAME = game-speed multiplier (a testing aid that accelerates
-// the whole live simulation) + care freeze. SOUND = master/music/effects volume and mute.
-// SYSTEM = debug overlay toggle, set time/date, cheats screen, factory reset, species info.
-// Reached from Menu -> Settings.
+// Settings: three tabbed pages. GAME = care freeze. SOUND = master/music/effects volume and
+// mute. SYSTEM = debug overlay toggle, set time/date, cheats screen, factory reset, species
+// info. Reached from Menu -> Settings. (Game speed moved to the Cheats screen: it is a
+// testing aid, not a player option.)
 class SceneSettings : public Scene {
     int page_ = 0;   // 0 = Game, 1 = Sound, 2 = System
     // Factory-reset confirmation: a dedicated sub-page with a HOLD-to-erase button, so a

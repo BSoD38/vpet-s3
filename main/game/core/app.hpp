@@ -11,6 +11,7 @@
 #include "scenes/care/scene_home.hpp"
 #include "scenes/care/scene_feed.hpp"
 #include "scenes/care/scene_conversation.hpp"
+#include "scenes/care/scene_death.hpp"
 #include "scenes/minigames/scene_run.hpp"
 #include "scenes/minigames/scene_mindmaze.hpp"
 #include "scenes/minigames/scene_smash.hpp"
@@ -24,16 +25,13 @@
 #include "scenes/menus/scene_update.hpp"
 #include "scenes/menus/scene_cheats.hpp"
 #include "scenes/menus/scene_timeset.hpp"
+#include "scenes/menus/scene_about.hpp"
 #include "scenes/menus/scene_stats.hpp"
 #include "scenes/menus/scene_journal.hpp"
 #include "scenes/menus/scene_rename.hpp"
 
-enum class SceneId { Home, Feed, Conversation, Menu, Activities, Run, MindMaze, Smash, Bulwark, Stance, Battle, BattleSelect, Settings, Update, Cheats, TimeSet, Stats, Journal, Rename };
-
-// Scene-change animation. Forward = going deeper (new covers, slides in from the
-// right with overshoot); Back = returning (old slides off, revealing new);
-// Iris = cartoon circle close/open (used for the minigame); None = instant.
-enum class Slide { None, Forward, Back, Iris };
+// SceneId and Slide live in core/scene.hpp (scene headers need them; this header includes
+// those before it could define anything).
 
 // Composition root: owns the subsystems and scenes, runs the game loop, and is
 // passed to every scene so they don't reach for globals.
@@ -53,6 +51,7 @@ public:
     SceneHome     home;
     SceneFeed     feedScene;             // food picker (named to avoid reading like pet.feed)
     SceneConversation conversationScene;
+    SceneDeath    deathScene;            // the death event (entered by the brink, never by menu)
     SceneMenu     menu;
     SceneActivities activities;
     SceneRun      run;
@@ -66,6 +65,7 @@ public:
     SceneUpdate   updateScene;           // SD-card firmware install (named to avoid Scene::update)
     SceneCheats   cheats;
     SceneTimeSet  timeset;
+    SceneAbout    about;                 // firmware / hardware / power readout
     SceneStats    stats;
     SceneJournal  journal;
     SceneRename   rename;
@@ -73,6 +73,13 @@ public:
     void init();               // bind scenes, boot pet, load flags, enter Home
     void runLoop();            // the forever render/sim loop (never returns)
     void setScene(SceneId id, Slide slide = Slide::None);   // switch scene, optionally animated
+    // The player has seen the memorial: conclude the death (generation++, save invalidated)
+    // and restart the chip. The fresh boot IS the fresh start -- hatching, per-creature
+    // resets and the conversation-history clear all run through the one tested path.
+    [[noreturn]] void restartAfterDeath();
+    // The gate context the run loop feeds the conversation system, for scenes that drive
+    // their own conversation search (SceneDeath's deathbed farewell).
+    ConvContext convCtx();
 
 private:
     bool  transitioning_ = false;   // a slide is in progress (input suppressed)

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <stdbool.h>
 #include "I2C_Driver.h"
 
 
@@ -60,6 +61,12 @@
 
 #define RTC_TIMER_FLAG		(0x08)
 
+// Seconds register, bit 7: the oscillator-stop flag. The chip sets it whenever its clock
+// has stopped -- i.e. it lost power -- and it stays set until the seconds register is
+// written again. That makes it the one health signal the RTC backup cell has: if the flag
+// is clear at boot, the cell kept the oscillator alive while the board was off.
+#define RTC_SECOND_OS		(0x80)
+
 typedef struct {
     uint16_t year;
     uint8_t month;
@@ -82,6 +89,11 @@ void PCF85063_Set_Date(datetime_t date);
 void PCF85063_Set_All(datetime_t time);
 
 void PCF85063_Read_Time(datetime_t *time);
+
+// Did the RTC lose its clock since the last time the clock was set? Latched by
+// PCF85063_Init() before anything can clear the flag, so this answers for THIS boot.
+// (The cell itself has no voltage sense anywhere on the board -- this is all there is.)
+bool PCF85063_Lost_Clock(void);
 
 
 void PCF85063_Enable_Alarm(void);

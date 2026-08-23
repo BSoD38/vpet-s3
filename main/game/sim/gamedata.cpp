@@ -96,3 +96,36 @@ bool gamedata_mount()
     else     ESP_LOGI(TAG, "mounted %s", GAMEDATA_ROOT);
     return ok;
 }
+
+// --- loose-SD mod accounting (see gamedata.hpp) ------------------------------------------
+// Written during the boot-time loads (single-threaded, before the game task starts) and read
+// by the About screen afterwards, so plain ints are enough.
+static int s_sdLoaded[GD_SYS_COUNT] = { 0 };
+
+void gd_sd_loaded(GdSystem s, int n) { if (s < GD_SYS_COUNT && n > 0) s_sdLoaded[s] += n; }
+int  gd_sd_count(GdSystem s)  { return s < GD_SYS_COUNT ? s_sdLoaded[s] : 0; }
+
+int gd_sd_total()
+{
+    int n = 0;
+    for (int i = 0; i < GD_SYS_COUNT; i++) n += s_sdLoaded[i];
+    return n;
+}
+
+const char* gd_sd_name(GdSystem s)
+{
+    switch (s) {
+        case GD_CREATURES: return "Creatures";
+        case GD_FOODS:     return "Foods";
+        case GD_NATURES:   return "Natures";
+        case GD_TRAITS:    return "Traits";
+        case GD_SOUNDS:    return "Sounds";
+        case GD_CONFIG:    return "Config";
+        default:           return "?";
+    }
+}
+
+bool gd_src_is_sd(const char* srcTag)
+{
+    return srcTag && srcTag[0] == 's' && srcTag[1] == 'd' && srcTag[2] == '\0';
+}

@@ -303,6 +303,7 @@ static void scan_manifest(Table& t, const char* root, uint8_t srcRoot, const cha
         n++;
     }
     cJSON_Delete(arr);
+    if (gd_src_is_sd(srcTag)) gd_sd_loaded(GD_SOUNDS, n);   // About screen's mod tally
     if (n) ESP_LOGI(TAG, "%s: %d sounds from %s", srcTag, n, path);
 }
 
@@ -366,6 +367,7 @@ static void scan_loose(Table& t, const char* root, uint8_t srcRoot, const char* 
         n++;
     }
     closedir(d);
+    if (gd_src_is_sd(srcTag)) gd_sd_loaded(GD_SOUNDS, n);
     if (n) ESP_LOGI(TAG, "%s: %d loose sounds in %s", srcTag, n, root);
 }
 

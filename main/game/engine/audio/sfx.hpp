@@ -53,6 +53,9 @@ inline constexpr const char* kGameOver = "gameover";
 // --- music -----------------------------------------------------------------------------
 inline constexpr const char* kMusicHome   = "bgm_home";
 inline constexpr const char* kMusicBattle = "bgm_battle";
+// The farewell. Played by SceneDeath's musicId() and NOWHERE else -- reuse would spend it.
+// The one time the player hears this, it should only ever have meant one thing.
+inline constexpr const char* kMusicFarewell = "bgm_farewell";
 
 // Fire-and-forget shorthand. Reads better at a call site that does not care about the
 // handle, which is nearly all of them.

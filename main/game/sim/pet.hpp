@@ -1,6 +1,7 @@
 #pragma once
 #include <cstdint>
 #include "personality.hpp"   // DriftAxis/AX_COUNT + PersonalityTracker (drift sink)
+#include "vitals.hpp"        // Condition + VitalsSave/VitalsTuning (death & lifespan, D0)
 
 class SaveStore;          // defined in save.hpp
 class CreatureRegistry;   // defined in creatures.hpp
@@ -52,6 +53,12 @@ enum PlayKind : uint8_t {
 // The reverse of Pet::moodId(): parse a data-driven mood string ("ok"/"hurt"/"angry").
 // Returns false on an unknown token -- callers must treat that as a no-op, never as "ok".
 bool mood_from_id(const char* s, PetMood* out);
+
+// Display names for raw persisted values. Free functions (the Pet methods delegate to
+// them) because the lineage ledger stores stage/friendship of creatures that no longer
+// exist as a Pet -- the journal's In Memory page names them through these.
+const char* stage_name(uint8_t stage);           // "Egg".."Mega+"
+const char* friendship_tier_name(uint16_t f);    // "Stranger".."Soulbound"
 
 // Is the SAVED pet's care freeze on (see Pet::setFrozen)? Reads the flag straight out of NVS
 // without constructing a Pet or the registries one needs, for the headless deep-sleep poll --
@@ -113,7 +120,8 @@ struct PetState {
     float    happiness;     // 0..100
     float    health;        // 0..100
     uint8_t  poop;          // 0..POOP_MAX
-    uint8_t  sick;          // 0/1
+    uint8_t  cond;          // Condition enum (was the 0/1 "sick" flag through v6 -- same byte,
+                            // superset values, so old blobs load unchanged; see vitals.hpp)
     uint8_t  lightsOff;     // 0/1 (asleep: auto by schedule, or manual)
     uint8_t  lastSleepPhase;// internal: last scheduled sleep state (edge detect)
     uint8_t  starveFlag;    // internal: starvation episode currently counted
@@ -136,7 +144,8 @@ struct BattleOutcome {
     int      healthPct;    // health (0..100) after the HP write-back
     int      friendDelta;  // friendship change (+ on win, - on loss)
     uint32_t statGain;     // total combat-stat points gained (win only)
-    bool     gotSick;      // the exit-HP sickness roll fired
+    bool     gotSick;      // the exit-HP roll fired on a WIN: caught a cold
+    bool     gotInjured;   // the exit-HP roll fired on a LOSS: wounded (festers if ignored)
 };
 
 // The virtual creature: simulation + care actions over a POD PetState.
@@ -161,8 +170,12 @@ class Pet {
     uint8_t   mood_ = MOOD_OK;         // PetMood; out-of-blob, per-creature
     uint8_t   mend_ = 0;               // care shown since being upset (softens a step when full)
     bool      frozen_ = false;         // care freeze: the whole sim is suspended (see setFrozen)
+    VitalsSave v_{};                   // life meter + condition timers; own NVS blob (see vitals.hpp)
 
     void newEgg();
+    void freshVitals();                // full pool, clean trailing average (birth / migration base)
+    void setCondition(Condition c, const char* why);   // logs + resets the escalation timer
+    void enterBrink(Brink why);        // death's door: roll fate + persist BEFORE any rendering
     // Tell the audio engine whose voice creature-voiced sounds should now use (see
     // VoiceProfile in engine/audio/audio.hpp). Called from every path that moves idx_,
     // because the alternative -- resolving the voice at each play() site -- would put the
@@ -245,6 +258,9 @@ public:
     // (egg/sick/asleep/upset) so the caller withholds friendship and reward FX too.
     bool play(float amount, PlayKind kind);
     void markSaved();             // stamp lastUpdate = now and persist
+    // Same, with the aging baseline given explicitly -- for the one caller that knows the
+    // wall clock better than clock_now() does: the screen that has just re-set the RTC.
+    void markSavedAt(uint32_t now);
     void setGameSpeed(uint16_t mult);
     bool checkRefused();          // true once if an action was just refused
     bool checkAte();              // true once if food was just eaten (drives the eat animation)
@@ -274,6 +290,38 @@ public:
     // is too undeveloped to train or fight. Gates the menu's Activities + Battle entries.
     bool     activitiesUnlocked() const { return s_.stage >= STAGE_IN_TRAINING_2; }
 
+    // --- condition & vitality (docs/death-and-lifespan.md; design rule 2: restrictions come
+    //     from the CONDITION track only, never from age) ---
+    Condition condition() const { return (Condition)s_.cond; }
+    // Battle, training and ALL minigames are blocked while anything is wrong. The pet-less
+    // "earn medicine money" game planned for the economy is the deliberate future exception.
+    bool conditionBlocked() const { return condition() != COND_HEALTHY; }
+    // Being properly ill refuses food and touch (the classic sick-pet lockout, and how it has
+    // always behaved); an injured or convalescing creature still eats and accepts comfort.
+    bool foodBlocked() const  { Condition c = condition();
+                                return c == COND_SICK || c == COND_SICK_BAD || c == COND_CRITICAL; }
+    bool touchBlocked() const { return foodBlocked(); }
+    const char* conditionMarker() const { return condition_marker(condition()); }   // nullptr if healthy
+    const VitalsSave& vitals() const { return v_; }   // read-only (debug overlay / stats)
+    LifeTrack lifeTrack() const;   // Prime/Elderly/Twilight from the vitality thresholds
+    float vitalityFrac() const;    // vitality / effective ceiling (scars shrink the ceiling)
+
+    // --- the brink & the death event (docs/death-and-lifespan.md §5-§7) ----------------
+    // While at the brink the whole sim is suspended (tick returns immediately), so the
+    // event can only ever resolve with the player watching. Fate was rolled and persisted
+    // at entry; the death scene reads it and calls exactly one of the two resolvers.
+    bool  atBrink() const { return v_.brink != BRINK_NONE; }
+    Brink brink()  const  { return (Brink)v_.brink; }
+    Fate  fate()   const  { return (Fate)v_.fate; }
+    // Fate said MIRACLE: apply the survival -- Critical: scar + partial refill + Recovery +
+    // the strongest personality push in the game; old age: a few borrowed weeks, still
+    // Twilight. Either way the next roll's odds are halved.
+    void applyMiracle();
+    // Fate said DEATH and the player has seen the memorial. Advances the generation and
+    // invalidates the save so the next BOOT hatches the successor through the ordinary
+    // fresh-start path -- the caller restarts the chip (App::restartAfterDeath).
+    void concludeDeath();
+
     // True when boot() hatched a fresh egg rather than loading a save. Lets the composition
     // root clear per-creature state (conversation history/journal) that Pet itself shouldn't
     // know about.
@@ -283,6 +331,12 @@ public:
     //     persist immediately). Kept as explicit named ops rather than exposing raw state. ---
     void cheatRestore();                        // full HP/energy/hunger/happiness, cure sick, clear poop
     void cheatSetHealth(float pct);             // 0..100
+    void cheatSetVitality(float frac);          // 0..1 of max -- the life-track test lever
+    void cheatSetCondition(Condition c);        // condition-track test lever (resets its clock)
+    // Straight to the death event, either flavour. Not a special path: it empties the pool,
+    // makes the condition match the story, and lets enterBrink roll fate FOR REAL -- the
+    // outcome is as binding as any natural death. False if refused (egg, already at brink).
+    bool cheatTriggerBrink(Brink why);
     void cheatSetEnergy(float pct);             // 0..100 (stamina)
     void cheatSetFriendship(int value);         // 0..FRIENDSHIP_MAX
     void cheatAdjustStat(StatId id, int delta); // nudge the trained modifier (clamped to 0..room)

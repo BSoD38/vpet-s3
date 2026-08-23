@@ -1,5 +1,6 @@
 #include "pet.hpp"
 #include "save.hpp"
+#include "lineage.hpp"          // the ledger a death is written into (before its scene renders)
 #include "creatures.hpp"
 #include "foods.hpp"            // Food (chosen food drives feeding effects + drift)
 #include "engine/util.hpp"      // clampf (shared)
@@ -36,6 +37,11 @@ static const float    SLEEP_HUNGER_FACTOR  = 0.3f;
 static const float    SLEEP_HAP_REC_PER_HR = 100.0f / 10.0f;
 static const float    AWAKE_NIGHT_HAP_HR   = 100.0f / 6.0f;
 static const uint32_t MAX_OFFLINE          = 24u * 3600u;
+// Past this, the gap is a clock that MOVED, not a player who was away, and boot() replays
+// nothing at all. An absence is capped at MAX_OFFLINE anyway, so a genuinely month-long
+// one loses only the 24h it would have been trimmed to -- while a clock correction stops
+// arriving as a full day of neglect on a creature that was never neglected.
+static const uint32_t CLOCK_JUMP_MAX       = 30u * 86400u;
 static const int      SLEEP_BACKLIGHT      = 25;
 static const float    DAY_LEN              = 86400.0f;
 static const float    ENERGY_MAX           = 100.0f;
@@ -114,6 +120,17 @@ static const char* K_BONDT      = "bondt";   // RTC second the current 24h windo
 static const char* K_IDLE       = "idle";    // idle REAL-seconds since the last interaction
 static const char* K_BOND_SCALE = "bscale";  // 1 once the bond has been rescaled to the wide range
 static const char* K_FROZEN     = "frzn";    // 1 while the care freeze is on (see setFrozen)
+static const char* K_VITALS     = "vital";   // VitalsSave blob (life meter; see vitals.hpp)
+
+static const uint32_t VIT_MAGIC   = 0x56495401;   // 'VIT\1'
+static const uint16_t VIT_VERSION = 2;            // v2: + brink/fate (the death event, D2)
+
+// A brush with death leaves a mark on who the creature is: hard toward the wary, withdrawn
+// corner (the neglect vectors' direction, amplified). Deliberately the strongest single
+// drift event in the game (docs/death-and-lifespan.md §5) -- even a saved pet comes back
+// changed, which is half of what keeps a save from being free.
+static const float DRIFT_SCAR[AX_COUNT] = { -0.7f, -0.3f, -0.6f, 0.9f };
+static const float SCAR_DRIFT_STRENGTH  = 3.0f;
 
 // Deliberately not a Pet method: power.cpp asks this BEFORE it decides to build a Pet at all.
 bool pet_frozen_saved(const SaveStore& save) { return save.loadU8(K_FROZEN, 0) != 0; }
@@ -147,9 +164,9 @@ static bool in_window(int h, int start, int end)
 bool Pet::checkRefused() { bool r = refused_; refused_ = false; return r; }
 bool Pet::checkAte()     { bool r = ate_;     ate_     = false; return r; }
 
-const char* Pet::stageName() const
+const char* stage_name(uint8_t stage)
 {
-    switch (s_.stage) {
+    switch (stage) {
         case STAGE_EGG:           return "Egg";
         case STAGE_IN_TRAINING_1: return "In-Training I";
         case STAGE_IN_TRAINING_2: return "In-Training II";
@@ -161,6 +178,8 @@ const char* Pet::stageName() const
         default:                  return "?";
     }
 }
+
+const char* Pet::stageName() const { return stage_name(s_.stage); }
 
 const char* Pet::speciesName() const { const Creature* c = cur(); return c ? c->name : "?"; }
 
@@ -196,7 +215,36 @@ bool Pet::schedSleep() const
 {
     const Creature* c = cur();
     if (!c) return false;
-    return in_window(simHour(), c->sleepStart, c->sleepEnd);
+    if (c->sleepStart == c->sleepEnd) return false;   // a no-sleep species must stay one
+    // Old creatures turn in earlier (docs/death-and-lifespan.md §4). Presentation only:
+    // sleep is where the aging is READ, never a penalty -- and mechanically a longer night
+    // is mildly kind (hunger slows, happiness and energy recover).
+    int start = c->sleepStart;
+    LifeTrack lt = lifeTrack();
+    if (lt != LIFE_PRIME) {
+        const VitalsTuning& T = vitals_tuning();
+        int extra = (int)(lt == LIFE_TWILIGHT ? T.twilightExtraSleepHrs : T.elderlyExtraSleepHrs);
+        start = ((start - extra) % 24 + 24) % 24;
+    }
+    return in_window(simHour(), start, c->sleepEnd);
+}
+
+float Pet::vitalityFrac() const
+{
+    float m = vitals_effective_max(v_.scars);
+    return m > 0.0f ? v_.vitality / m : 0.0f;
+}
+
+LifeTrack Pet::lifeTrack() const
+{
+    if (s_.stage == STAGE_EGG) return LIFE_PRIME;     // an egg is unborn, not old
+    const VitalsTuning& T = vitals_tuning();
+    // Thresholds are fractions of the EFFECTIVE ceiling: scars shrink it, so a much-saved
+    // pet reaches old age sooner -- deliberately (docs/death-and-lifespan.md §5).
+    float f = vitalityFrac();
+    if (f <= T.twilightFrac) return LIFE_TWILIGHT;
+    if (f <= T.elderlyFrac)  return LIFE_ELDERLY;
+    return LIFE_PRIME;
 }
 
 float Pet::stageProgress() const
@@ -279,9 +327,114 @@ void Pet::evolveTo(int creatureIdx)
              (unsigned)s_.friendship, (unsigned)s_.careMistakes);
 }
 
+void Pet::freshVitals()
+{
+    v_ = VitalsSave{};
+    v_.magic    = VIT_MAGIC;
+    v_.version  = VIT_VERSION;
+    v_.vitality = vitals_tuning().vitMax;   // full at birth; it only ever goes down
+}
+
+// Condition changes funnel through here so every transition is logged the same way and
+// the escalation clock (v_.condSecs) can never carry over from the previous state.
+void Pet::setCondition(Condition c, const char* why)
+{
+    if (condition() == c) return;
+    ESP_LOGI(TAG, "condition %s -> %s (%s)",
+             condition_marker(condition()) ? condition_marker(condition()) : "OK",
+             condition_marker(c)           ? condition_marker(c)           : "OK", why);
+    s_.cond = (uint8_t)c;
+    v_.condSecs = 0.0f;
+}
+
+void Pet::enterBrink(Brink why)
+{
+    if (v_.brink != BRINK_NONE || why == BRINK_NONE) return;
+    // The roll happens HERE -- once -- and is on flash before the event renders a single
+    // frame, so the reset button can never be a reroll (design rule 4). The input is the
+    // whole history of the bond, halved per miracle already granted; below the bond floor
+    // the chance is effectively zero. The miracle IS the friendship.
+    const VitalsTuning& T = vitals_tuning();
+    float bond = ((float)s_.friendship - T.miracleBondFloor)
+               / ((float)FRIENDSHIP_MAX - T.miracleBondFloor);
+    float p = T.miracleMax * clampf(bond, 0.0f, 1.0f);
+    for (uint8_t i = 0; i < v_.savesUsed; i++) p *= 0.5f;
+    const bool saved = rnd01() < p;
+
+    v_.brink = (uint8_t)why;
+    v_.fate  = saved ? FATE_MIRACLE : FATE_DEATH;
+    if (why == BRINK_CRITICAL) setCondition(COND_CRITICAL, "the pool emptied");
+    ESP_LOGW(TAG, "at the brink (%s): bond %u, %u saves spent, p=%.2f -> %s",
+             why == BRINK_OLDAGE ? "old age" : "critical", (unsigned)s_.friendship,
+             (unsigned)v_.savesUsed, p, saved ? "MIRACLE" : "death");
+
+    if (!saved) {
+        // Written NOW, not when the scene finishes: a power cut mid-farewell must find
+        // the death already in the ledger (rule 4, from the other side).
+        LineageRecord rec{};
+        strncpy(rec.speciesId, s_.creatureId, sizeof rec.speciesId - 1);
+        strncpy(rec.nickname,  nickname_,     sizeof rec.nickname  - 1);
+        rec.ageSecs    = (uint32_t)s_.ageSecs;
+        rec.diedAt     = clock_now();
+        rec.friendship = s_.friendship;
+        rec.stage      = s_.stage;
+        rec.cause      = (uint8_t)why;
+        rec.savesUsed  = v_.savesUsed;
+        rec.generation = (uint8_t)lineage_generation(save_);
+        lineage_append(save_, rec);
+    }
+    markSaved();
+}
+
+void Pet::applyMiracle()
+{
+    if (v_.brink == BRINK_NONE || v_.fate != FATE_MIRACLE) return;
+    const VitalsTuning& T = vitals_tuning();
+    if (v_.brink == BRINK_CRITICAL) {
+        // Survival is never free: the ceiling shrinks (the scar), the refill is a fraction
+        // of what REMAINS, and the pet convalesces. It also comes back changed -- the scar
+        // is the strongest single personality push in the game, toward the wary corner.
+        // Direct nudge, not nudgeDrift(): a near-death is not a player interaction and
+        // must not reset the neglect clock.
+        v_.scars++;
+        v_.vitality = T.critRestoreFrac * vitals_effective_max(v_.scars);
+        setCondition(COND_RECOVERY, "a miracle");
+        if (drift_) drift_->nudge(DRIFT_SCAR, SCAR_DRIFT_STRENGTH);
+        s_.health = clampf(s_.health, 20.0f, 100.0f);   // conscious, at least
+    } else {
+        // Old age is only ever DEFERRED: a few borrowed weeks, still Twilight, and the
+        // next roll -- there will be one -- at half these odds.
+        v_.vitality += T.reprieveFrac * vitals_effective_max(v_.scars);
+    }
+    v_.savesUsed++;
+    v_.brink = BRINK_NONE;
+    v_.fate  = FATE_DEATH;
+    ESP_LOGW(TAG, "the miracle held: vitality %.0f, %u saves spent, %u scars",
+             v_.vitality, (unsigned)v_.savesUsed, (unsigned)v_.scars);
+    markSaved();
+}
+
+void Pet::concludeDeath()
+{
+    if (v_.brink == BRINK_NONE || v_.fate != FATE_DEATH) return;
+    // The lineage record was already written at the brink; what remains is to pass the
+    // torch. The pet blob is invalidated (not zeroed vitals: those die with the pet) so
+    // the next boot()'s ordinary fresh-start path hatches generation+1's egg with every
+    // per-creature reset it already performs.
+    lineage_bump_generation(save_);
+    freshVitals();
+    save_.beginBatch();
+    PetState blank{};                    // magic 0: boot()'s validity check routes to newEgg()
+    save_.store(blank);
+    save_.storeBlob(K_VITALS, &v_, sizeof v_);
+    save_.endBatch();
+    ESP_LOGW(TAG, "the line continues: generation %u awaits", (unsigned)lineage_generation(save_));
+}
+
 void Pet::newEgg()
 {
     s_ = PetState{};
+    freshVitals();
     s_.magic = PET_MAGIC;
     s_.version = PET_VERSION;
     s_.stage = STAGE_EGG;
@@ -311,6 +464,11 @@ void Pet::tick(float dt)   // dt is SIM seconds (the caller has applied gameSpee
     // and boot()'s offline catch-up comes through here as well, so an absence spent frozen
     // costs the player nothing whether the device was on, asleep or off.
     if (frozen_) return;
+    // Death's door: the world holds its breath. Nothing advances -- not age, not needs,
+    // not the drain -- so the event can only resolve with the player watching (design
+    // rule 3: death never completes offline; boot()'s catch-up funnels through here too,
+    // as does the deep-sleep poll's headless replay).
+    if (v_.brink != BRINK_NONE) return;
     s_.ageSecs   += dt;
     s_.stageSecs += dt;
 
@@ -370,6 +528,10 @@ void Pet::tick(float dt)   // dt is SIM seconds (the caller has applied gameSpee
             s_.careMistakes++;
             s_.starveFlag = 1;
             addFriendship(-FR_MISTAKE);
+            // Neglect costs twice: this flat chip now, and the worsened trailing average
+            // below for days after (docs/death-and-lifespan.md §2). The floor there also
+            // covers this subtraction.
+            v_.vitality -= vitals_tuning().mistakeChip;
             // Direct, not nudgeDrift(): starving IS neglect, so it must not reset the
             // idle timer the way a deliberate interaction does.
             if (drift_) drift_->nudge(DRIFT_STARVE);
@@ -378,24 +540,70 @@ void Pet::tick(float dt)   // dt is SIM seconds (the caller has applied gameSpee
         s_.starveFlag = 0;
     }
 
-    if (!s_.sick) {
+    if (s_.cond == COND_HEALTHY) {
         float rate = 0.0f;
         if (s_.happiness < HAP_SICK_THRESH)
             rate += K_HAPPY_SICK * (HAP_SICK_THRESH - s_.happiness) / HAP_SICK_THRESH;
         rate += K_POOP_SICK * s_.poop;
-        if (rate > 0.0f && rnd01() < (1.0f - expf(-rate * dt))) {
-            s_.sick = 1;
-            ESP_LOGI(TAG, "got sick (hap=%.0f poop=%u)", s_.happiness, s_.poop);
-        }
+        if (rate > 0.0f && rnd01() < (1.0f - expf(-rate * dt)))
+            setCondition(COND_SICK, "low care");
     }
 
     float hpDrainHr = 0.0f;
-    if (s_.sick) hpDrainHr += SICK_HP_PER_HR;
+    // Any ailment saps the fast meter -- except Recovery, which is healing by definition.
+    if (s_.cond != COND_HEALTHY && s_.cond != COND_RECOVERY) hpDrainHr += SICK_HP_PER_HR;
     if (s_.hunger < HUNGER_DANGER)
         hpDrainHr += STARVE_HP_PER_HR * (HUNGER_DANGER - s_.hunger) / HUNGER_DANGER;
     if (hpDrainHr > 0.0f)                             s_.health -= hpDrainHr * perS;
     else if (s_.happiness > 25.0f && !s_.lightsOff)   s_.health += HEALTH_REC_PER_HR * perS;
     s_.health = clampf(s_.health, 0, 100);
+
+    // --- condition escalation + vitality, the slow life meter (docs/death-and-lifespan.md).
+    // `health` above is the fast, recoverable bar; vitality only ever goes down, care quality
+    // sets the slope, and EVERY death is it reaching zero. One meter, many slopes.
+    {
+        const VitalsTuning& T = vitals_tuning();
+
+        // An ailment the player leaves alone gets worse on a clock. This is the agency
+        // window: treatment works on Sick/Injured; once the pool empties into Critical,
+        // only the roll is left. Recovery is the one condition that heals ITSELF -- gentle
+        // time is the treatment.
+        if (s_.cond != COND_HEALTHY) {
+            v_.condSecs += dt;
+            if (s_.cond == COND_SICK && v_.condSecs >= T.sickEscalateHrs * 3600.0f)
+                setCondition(COND_SICK_BAD, "untreated");
+            else if (s_.cond == COND_INJURED && v_.condSecs >= T.injuryFesterHrs * 3600.0f)
+                setCondition(COND_SICK, "festered");   // battles never kill; ignoring them can
+            else if (s_.cond == COND_RECOVERY && v_.condSecs >= T.recoveryDays * 86400.0f)
+                setCondition(COND_HEALTHY, "recovered");
+        }
+
+        // Instantaneous neglect score 0..1, read off the same signals the care loop shows
+        // the player -- a need is only neglect while it is visibly unmet.
+        float n = 0.0f;
+        if (s_.hunger    < 40.0f) n += 0.30f * (40.0f - s_.hunger)    / 40.0f;
+        if (s_.happiness < 40.0f) n += 0.25f * (40.0f - s_.happiness) / 40.0f;
+        n += 0.08f * (float)s_.poop;
+        // An untreated ailment is neglect too -- but Recovery isn't the player's failing,
+        // it's the miracle's aftermath, so it doesn't poison the trailing average.
+        if (s_.cond != COND_HEALTHY && s_.cond != COND_RECOVERY) n += 0.35f;
+        if (n > 1.0f) n = 1.0f;
+        // Trailing average (time constant ~2 days): the multiplier reads the PATTERN of
+        // care, so one missed meal barely moves it and a neglectful week moves it a lot.
+        v_.careEma += (n - v_.careEma) * (1.0f - expf(-dt / (T.emaTauHrs * 3600.0f)));
+
+        float perDay = T.baseDrainPerDay * (T.multBest + v_.careEma * (T.multWorst - T.multBest));
+        if (s_.cond == COND_SICK_BAD) perDay += T.sickBadPerDay;   // the cliff: fatal in days
+        v_.vitality -= perDay * (dt / 86400.0f);
+        if (v_.vitality <= 0.0f) {
+            v_.vitality = 0.0f;
+            // Which death is this? A pool emptied while anything is WRONG is the neglect
+            // track's end (Critical). Emptied with nothing wrong at all, it is simply the
+            // end of a long life (docs/death-and-lifespan.md §3-§4).
+            enterBrink(s_.cond != COND_HEALTHY ? BRINK_CRITICAL : BRINK_OLDAGE);
+            return;   // suspended from this moment on (the gate at the top of tick)
+        }
+    }
 
     // Personality: long stretches with no interaction are their own signal (only counted
     // while awake -- you can't interact with a sleeping creature), then the tracker
@@ -418,9 +626,16 @@ void Pet::tick(float dt)   // dt is SIM seconds (the caller has applied gameSpee
     if (drift_) drift_->tick(dt, s_.stage);
 }
 
-void Pet::markSaved()
+void Pet::markSaved() { markSavedAt(clock_now()); }
+
+// Persist with an EXPLICIT aging baseline. Split out for the clock-setting screen, which
+// has just written a time to the RTC that clock_now() cannot see yet: the `datetime` global
+// it reads is refreshed by the core-0 driver task only every 100 ms, so stamping clock_now()
+// there would anchor the save to the time the player just replaced -- and the next boot
+// would then measure the whole correction as elapsed absence.
+void Pet::markSavedAt(uint32_t now)
 {
-    s_.lastUpdate = clock_now();
+    s_.lastUpdate = now;
     save_.beginBatch();                 // blob + bond + mood + idle + drift: ONE nvs commit
     save_.store(s_);
     save_.storeU32(K_BONDP, bondToday_);
@@ -430,6 +645,7 @@ void Pet::markSaved()
     // slices, each of which is shorter than IDLE_PERIOD on its own.
     save_.storeU32(K_IDLE, (uint32_t)idleSecs_);
     save_.storeU8(K_FROZEN, frozen_ ? 1 : 0);
+    save_.storeBlob(K_VITALS, &v_, sizeof v_);
     if (drift_) drift_->persist();      // no-op unless the drift state actually changed
     save_.endBatch();
 }
@@ -463,7 +679,12 @@ void Pet::forgetSave()
 
 void Pet::boot()
 {
-    PCF85063_Read_Time(&datetime);   // seed the RTC global before first clock_now()
+    // Seed the RTC global before the first clock_now(), but ONLY when nobody has yet:
+    // the headless timer-wake path runs before Driver_Init, so the global is still zeroed
+    // there and markSaved() would otherwise persist "no clock" as the aging baseline. In a
+    // full boot the core-0 driver task owns this global and has already refreshed it, and
+    // writing it from here too is the cross-core race SceneTimeSet is careful not to make.
+    if (datetime.year == 0) PCF85063_Read_Time(&datetime);
 
     // FIRST, before anything can tick: the catch-up loop below runs through tick(), and tick()
     // is where the freeze is enforced. Loaded any later and a week's absence would be replayed
@@ -509,8 +730,51 @@ void Pet::boot()
         // period and days of neglect produced zero idle drift.
         idleSecs_ = (float)save_.loadU32(K_IDLE, 0);
 
+        // Vitals: own blob, own version (adding a PetState field would have WIPED the pet).
+        // Loaded BEFORE the catch-up loop, which drains vitality through tick() like any
+        // other elapsed time -- and which the brink gate suspends, so a pet that reached
+        // death's door in a drawer resumes INTO the event, not past it.
+        if (!save_.loadBlob(K_VITALS, &v_, sizeof v_)
+            || v_.magic != VIT_MAGIC || v_.version != VIT_VERSION) {
+            // v1 (the pre-death-event firmware) lacked brink/fate; carry its meters over
+            // rather than re-deriving them from age.
+            struct V1 { uint32_t magic; uint16_t version; uint8_t savesUsed, scars;
+                        float vitality, careEma, condSecs; } old{};
+            if (save_.loadBlob(K_VITALS, &old, sizeof old)
+                && old.magic == VIT_MAGIC && old.version == 1) {
+                freshVitals();
+                v_.savesUsed = old.savesUsed;  v_.scars = old.scars;
+                v_.vitality  = old.vitality;   v_.careEma = old.careEma;
+                v_.condSecs  = old.condSecs;
+                ESP_LOGI(TAG, "vitals v1 -> v2 (vitality %.0f carried over)", v_.vitality);
+            } else {
+                // No vitals at all: this save predates the death system. Initialise from
+                // age at the AVERAGE drain rate with a generous floor, so nobody's
+                // companion turns old on flash day (docs/death-and-lifespan.md §9).
+                const VitalsTuning& T = vitals_tuning();
+                freshVitals();
+                float aged  = T.vitMax - (s_.ageSecs / 86400.0f) * T.baseDrainPerDay;
+                float floor = 0.6f * T.vitMax;
+                v_.vitality = aged < floor ? floor : aged;
+                ESP_LOGI(TAG, "vitals initialised (age %.1fd -> vitality %.0f/%.0f)",
+                         s_.ageSecs / 86400.0f, v_.vitality, T.vitMax);
+            }
+        }
+
+        // A clock discontinuity is not an absence. lastUpdate == 0 means the save was
+        // written while the RTC was untrustworthy (see CLOCK_YEAR_MIN), so there is no
+        // baseline to measure from; a gap past CLOCK_JUMP_MAX means the clock was set, the
+        // backup battery was changed, or the RTC had been reset. Replaying either as
+        // neglect is what brought a creature back evolved, starving and at 0 HP after
+        // nothing more than setting the time and power-cycling.
         uint32_t elapsed = clock_elapsed(s_.lastUpdate);
-        if (elapsed > MAX_OFFLINE) elapsed = MAX_OFFLINE;
+        if (s_.lastUpdate == 0 || elapsed > CLOCK_JUMP_MAX) {
+            ESP_LOGW(TAG, "clock discontinuity (last %u, now %u, gap %us): no catch-up",
+                     (unsigned)s_.lastUpdate, (unsigned)clock_now(), (unsigned)elapsed);
+            elapsed = 0;
+        } else if (elapsed > MAX_OFFLINE) {
+            elapsed = MAX_OFFLINE;
+        }
         char ab[16];
         ESP_LOGI(TAG, "loaded (%s %s, %s), offline catch-up %us",
                  speciesName(), stageName(), ageStr(ab, sizeof ab), (unsigned)elapsed);
@@ -577,7 +841,9 @@ bool Pet::canEat()
     if (careBlocked()) { ESP_LOGI(TAG, "refuses food (care frozen)"); return false; }
     if (s_.stage == STAGE_EGG) { ESP_LOGI(TAG, "can't feed (egg)"); return false; }
     if (s_.lightsOff) { ESP_LOGI(TAG, "refuses food (asleep)"); refused_ = true; return false; }
-    if (s_.sick)      { ESP_LOGI(TAG, "refuses food (sick)");   refused_ = true; return false; }
+    // Proper illness refuses food (the classic sick-pet lockout); an injured or convalescing
+    // creature still eats -- resting and being fed is what those states are FOR.
+    if (foodBlocked()) { ESP_LOGI(TAG, "refuses food (%s)", conditionMarker()); refused_ = true; return false; }
     return true;
 }
 
@@ -643,18 +909,28 @@ void Pet::heal()
 {
     if (careBlocked()) { sfx::play(sfx::kDenied); return; }
     sfx::play(sfx::kHeal);
-    s_.sick = 0;
+    // One dose treats one step: mild sickness and injuries clear, serious sickness drops
+    // back to mild (a second dose finishes the job). Critical -- once it exists (D2) -- is
+    // past treating: the agency window is HERE, in the Sick states, by design
+    // (docs/death-and-lifespan.md §3). Healthy stays a plain health top-up, as ever.
+    switch (condition()) {
+        case COND_SICK_BAD: setCondition(COND_SICK,    "treated"); break;
+        case COND_SICK:
+        case COND_INJURED:  setCondition(COND_HEALTHY, "treated"); break;
+        default: break;
+    }
     s_.health = clampf(s_.health + 40, 0, 100);
     addFriendship(FR_HEAL);
     idleSecs_ = 0.0f;                  // see clean(): duty still counts as interaction
-    ESP_LOGI(TAG, "heal (health=%.0f)", s_.health);
+    ESP_LOGI(TAG, "heal (health=%.0f, condition=%s)", s_.health,
+             conditionMarker() ? conditionMarker() : "OK");
     markSaved();
 }
 
 bool Pet::play(float amount, PlayKind kind)
 {
     if (careBlocked()) return false;
-    if (s_.stage == STAGE_EGG || s_.sick || s_.lightsOff) return false;
+    if (s_.stage == STAGE_EGG || touchBlocked() || s_.lightsOff) return false;
     // Upset creatures don't want to be touched. The "no" wiggle carries the message, and food
     // is still accepted -- that's the way back (see PetMood). Returning false lets the scene
     // withhold the bond/reward FX too: a refused touch must grant NOTHING.
@@ -835,11 +1111,54 @@ void Pet::cheatRestore()
 {
     s_.health = 100; s_.energy = ENERGY_MAX;
     s_.hunger = 100; s_.happiness = 100;
-    s_.sick = 0; s_.poop = 0;
+    setCondition(COND_HEALTHY, "cheat");
+    s_.poop = 0;
+    // The full restore includes the long meter -- it is the dev tool, and testing the
+    // vitality maths needs a way back to a known-good pool.
+    v_.vitality = vitals_tuning().vitMax;
+    v_.careEma  = 0.0f;
     markSaved();
 }
 
 void Pet::cheatSetHealth(float pct) { s_.health = clampf(pct, 0.0f, 100.0f);       markSaved(); }
+
+void Pet::cheatSetCondition(Condition c)
+{
+    // Test lever for the condition track: escalation waits half a day and injuries need a
+    // lost battle, so exercising the states on-device needs a direct set. Routed through
+    // setCondition so the escalation clock resets exactly as a real transition would.
+    setCondition(c, "cheat");
+    markSaved();
+}
+
+bool Pet::cheatTriggerBrink(Brink why)
+{
+    if (why == BRINK_NONE || v_.brink != BRINK_NONE) return false;
+    if (s_.stage == STAGE_EGG) return false;       // an egg is unborn; it cannot die
+    // The cheat only fast-forwards the drain -- everything past this line is the same
+    // code a natural death runs, including the roll and its persistence. The condition
+    // is set to match the flavour so the scene's framing is coherent: a Critical death
+    // implies an illness that got there; an old-age death implies nothing wrong at all.
+    v_.vitality = 0.0f;
+    if (why == BRINK_CRITICAL && s_.cond == COND_HEALTHY)
+        setCondition(COND_SICK_BAD, "cheat: brink");
+    else if (why == BRINK_OLDAGE && s_.cond != COND_HEALTHY)
+        setCondition(COND_HEALTHY, "cheat: brink");
+    enterBrink(why);                                // rolls fate + persists + markSaved
+    return true;
+}
+
+void Pet::cheatSetVitality(float frac)
+{
+    // The life-track test lever: Elderly/Twilight take months to reach honestly, and the
+    // brink takes a lifetime -- so the slider reaches all of them. Dragged to zero, the
+    // pool empties and the next tick enters the death event the same way a real life
+    // ends (via enterBrink, roll and all). Set the Condition lever first to rehearse the
+    // Critical flavour; healthy at zero rehearses old age.
+    v_.vitality = clampf(frac, 0.0f, 1.0f) * vitals_effective_max(v_.scars);
+    ESP_LOGI(TAG, "cheat: vitality -> %.0f (%s)", v_.vitality, life_track_id(lifeTrack()));
+    markSaved();
+}
 void Pet::cheatSetEnergy(float pct) { s_.energy = clampf(pct, 0.0f, ENERGY_MAX);   markSaved(); }
 
 void Pet::cheatSetFriendship(int value)
@@ -942,10 +1261,16 @@ BattleOutcome Pet::applyBattleResult(bool won, float hpFrac)
         recordLoss();
     }
 
-    // exit-HP sickness roll: the lower the HP you walked away with, the likelier a cold
-    if (!s_.sick && s_.health < SICK_HP_THRESH) {
+    // Exit-HP roll: the lower the HP you walked away with, the likelier an aftermath. A
+    // rough WIN just costs a cold; a rough LOSS wounds. The distinction has teeth because
+    // injuries fester into sickness if ignored (see tick) -- battles never kill, but
+    // ignoring their aftermath can (docs/death-and-lifespan.md §3).
+    if (s_.cond == COND_HEALTHY && s_.health < SICK_HP_THRESH) {
         float chance = (SICK_HP_THRESH - s_.health) / SICK_HP_THRESH * SICK_MAX_CHANCE;
-        if (rnd01() < chance) { s_.sick = 1; o.gotSick = true; }
+        if (rnd01() < chance) {
+            if (won) { setCondition(COND_SICK,    "post-battle cold"); o.gotSick    = true; }
+            else     { setCondition(COND_INJURED, "battle wound");     o.gotInjured = true; }
+        }
     }
 
     o.healthPct = (int)s_.health;
@@ -958,9 +1283,10 @@ BattleOutcome Pet::applyBattleResult(bool won, float hpFrac)
 // Eight tiers across the wide scale so a milestone still lands every week or two even
 // though the whole climb takes months. The exact number stays hidden -- only this name
 // is ever shown (a deliberate choice: the bond is a relationship, not a progress bar).
-const char* Pet::friendshipTier() const
+const char* Pet::friendshipTier() const { return friendship_tier_name(s_.friendship); }
+
+const char* friendship_tier_name(uint16_t f)
 {
-    uint16_t f = s_.friendship;
     if (f <  500) return "Stranger";
     if (f < 1500) return "Acquaintance";
     if (f < 3000) return "Familiar";

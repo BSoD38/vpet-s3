@@ -3,6 +3,7 @@
 #include "engine/gfx.hpp"
 #include "ui/widgets.hpp"
 #include "engine/drivers.hpp"   // datetime, datetime_t, PCF85063_Set_All, PCF85063_Read_Time
+#include "engine/clock.hpp"     // clock_epoch, CLOCK_YEAR_MIN
 
 static const int ROW_N = 5;
 static const char* ROW_LBL[ROW_N] = { "Year", "Month", "Day", "Hour", "Min" };
@@ -16,7 +17,10 @@ static Rect plus_btn (int i) { return { PLUS_X,  ROW_Y0 + i * ROW_DY, STEP_W, ST
 static const Rect SET_BTN { 16,  250, 100, 46 };
 static const Rect CAN_BTN { 126, 250, 98,  46 };
 
-static const int YEAR_MIN = 2000, YEAR_MAX = 2069;   // driver stores year-1970 as BCD (<=99)
+// The driver stores year-1970 as BCD, so 2069 is the ceiling. The floor is the clock
+// module's: anything below it is read as a reset RTC rather than a time the player chose,
+// so the picker must not be able to produce one.
+static const int YEAR_MIN = CLOCK_YEAR_MIN, YEAR_MAX = 2069;
 
 // press-and-hold auto-repeat
 static const float HOLD_DELAY = 0.6f;   // hold this long before auto-repeat starts
@@ -136,7 +140,14 @@ void SceneTimeSet::onInput(const Input& in)
         PCF85063_Set_All(t);
         // the core-0 driver task refreshes the `datetime` global within ~100ms;
         // don't write it from here (avoids the cross-core race).
-        app().pet.markSaved();           // re-stamp lastUpdate to the new clock
+        //
+        // Re-anchor the offline clock to the time we JUST wrote, NOT to clock_now(): that
+        // still reads the pre-set global for up to ~100ms, and stamping the old time made
+        // the next boot measure the whole correction as time the player had spent away --
+        // a full MAX_OFFLINE of neglect replayed onto a creature that had been sitting
+        // right here. (Cut power before the 120s autosave and that stale stamp was all
+        // the save had.)
+        app().pet.markSavedAt(clock_epoch(t));
         app().setScene(SceneId::Settings, Slide::Back);
         return;
     }

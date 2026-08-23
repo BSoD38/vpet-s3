@@ -1,0 +1,114 @@
+[
+  {
+    "_comment": "Deathbed farewells (docs/death-and-lifespan.md par.6). trigger=deathbed keeps",
+    "_comment2": "them out of the ambient pool; SceneDeath searches for them at an OLD-AGE brink",
+    "_comment3": "only. '@fate' resolves at load to onDeath/onReprieve per the roll persisted at",
+    "_comment4": "the brink -- choices colour the goodbye, they can never steer it. repeatable,",
+    "_comment5": "because reprieves mean a pet can stand at the brink more than once. Below",
+    "_comment6": "Trusted (5000) none of these gate in and the plain scene plays: the farewell",
+    "_comment7": "and the miracle odds arrive together, both products of the bond.",
+    "id": "deathbed/trusted",
+    "title": "At the end",
+    "priority": 50,
+    "repeatable": true,
+    "trigger": "deathbed",
+    "when": { "minFriendship": 5000 },
+    "start": "n0",
+    "onDeath": "d0",
+    "onReprieve": "r0",
+    "nodes": [
+      {
+        "id": "n0",
+        "text": "Come close. It's alright -- I'm not afraid. I just wanted you near.",
+        "choices": [
+          { "text": "I'm here", "to": "held",
+            "effects": { "friendship": 5, "happiness": 4 } },
+          { "text": "Don't go", "to": "dontgo",
+            "effects": { "friendship": 4 } }
+        ]
+      },
+      { "id": "held",   "text": "I know. You always were, when it counted.", "to": "@fate" },
+      { "id": "dontgo", "text": "That part isn't mine to choose. But this part -- being with you now -- is.", "to": "@fate" },
+
+      { "id": "d0", "text": "Thank you. For all of it. Remember me a little, will you?", "to": "d1" },
+      { "id": "d1", "text": "That's all. That's everything." },
+
+      { "id": "r0", "text": "...huh. The morning came anyway.", "to": "r1" },
+      { "id": "r1", "text": "I think I'd like to stay a little longer, if that's alright." }
+    ]
+  },
+  {
+    "id": "deathbed/bonded",
+    "title": "Everything, counted",
+    "priority": 60,
+    "repeatable": true,
+    "trigger": "deathbed",
+    "when": { "minFriendship": 8500 },
+    "start": "n0",
+    "onDeath": "d0",
+    "onReprieve": "r0",
+    "nodes": [
+      {
+        "id": "n0",
+        "text": "Sit with me. I've been keeping count, you know. Every meal. Every game. Every time you came back.",
+        "choices": [
+          { "text": "I'd do it all again", "to": "n1a",
+            "effects": { "friendship": 8, "happiness": 5 } },
+          { "text": "I kept count too", "to": "n1b",
+            "effects": { "friendship": 8, "happiness": 5 } }
+        ]
+      },
+      { "id": "n1a", "text": "I believe you. That's the strange thing about you -- I always believed you.", "to": "n2" },
+      { "id": "n1b", "text": "Then between us, nothing was lost. Not one day.", "to": "n2" },
+      { "id": "n2",  "text": "When I was small, I thought you were enormous. Then I grew, and you stayed exactly the right size.", "to": "n3" },
+      {
+        "id": "n3",
+        "text": "Whatever comes next -- if anything does -- I'll be the part of it that remembers you.",
+        "choices": [
+          { "text": "And I'll remember you", "to": "@fate",
+            "effects": { "friendship": 6 } },
+          { "text": "There's no one like you", "to": "@fate",
+            "effects": { "happiness": 6 } }
+        ]
+      },
+
+      { "id": "d0", "text": "Then neither of us is really going anywhere.", "to": "d1" },
+      { "id": "d1", "text": "It doesn't hurt. It's just... quiet. Stay till I'm asleep?", "to": "d2" },
+      { "id": "d2", "text": "...thank you. Good night." },
+
+      { "id": "r0", "text": "...the quiet passed me by.", "to": "r1" },
+      { "id": "r1", "text": "Well then. It seems you're not rid of me yet.", "to": "r2" },
+      { "id": "r2", "text": "Come on. Let's see what a borrowed morning looks like." }
+    ]
+  },
+  {
+    "id": "deathbed/again",
+    "title": "Here again",
+    "priority": 70,
+    "repeatable": true,
+    "trigger": "deathbed",
+    "when": { "minFriendship": 5000, "minReprieves": 1 },
+    "start": "n0",
+    "onDeath": "d0",
+    "onReprieve": "r0",
+    "nodes": [
+      {
+        "id": "n0",
+        "text": "You're sitting with me again. We've been here before, you and I.",
+        "choices": [
+          { "text": "As many times as it takes", "to": "n1",
+            "effects": { "friendship": 6, "happiness": 4 } },
+          { "text": "I'm still not ready", "to": "n1",
+            "effects": { "friendship": 4 } }
+        ]
+      },
+      { "id": "n1", "text": "Every time, I think: one more day would be enough. And every time, it isn't.", "to": "@fate" },
+
+      { "id": "d0", "text": "This time feels different. Lighter.", "to": "d1" },
+      { "id": "d1", "text": "It was enough. YOU were enough. Every single time." },
+
+      { "id": "r0", "text": "...ha. Once more, then.", "to": "r1" },
+      { "id": "r1", "text": "Don't look so surprised. I've had practice." }
+    ]
+  }
+]

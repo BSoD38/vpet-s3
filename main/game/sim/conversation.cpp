@@ -117,6 +117,8 @@ static uint32_t ctx_hash(const ConvContext& c)
     h = fnv_mix(h, fnv1a(c.trait   ? c.trait   : ""));
     h = fnv_mix(h, fnv1a(c.species ? c.species : ""));
     h = fnv_mix(h, fnv1a(c.mood    ? c.mood    : ""));
+    h = fnv_mix(h, fnv1a(c.life    ? c.life    : ""));
+    h = fnv_mix(h, c.reprieves);
     return h;
 }
 
@@ -326,6 +328,10 @@ void ConversationSystem::init(SaveStore& save)
     uint32_t next = save_->loadU32(K_NEXT, 0);
     uint32_t now  = clock_now();
     cooldown_ = (next > now) ? (float)(next - now) : 0.0f;
+    // Clamped, because K_NEXT was written against whatever the clock read back then: a clock
+    // since set BACKWARDS (or one that was reset while the pet kept playing) would otherwise
+    // resume a cooldown of years and lock conversations out for good.
+    if (cooldown_ > COOLDOWN_MAX) cooldown_ = COOLDOWN_MAX;
 }
 
 // --- gate evaluation -------------------------------------------------------------
@@ -335,6 +341,15 @@ bool ConversationSystem::gatePasses(void* json, const ConvContext& ctx, bool* ou
 {
     cJSON* root = (cJSON*)json;
     *outPriority = (int16_t)gd_num(root, "priority", 0);
+
+    // Triggered conversations live OUTSIDE the ambient pool: the entry's "trigger" must
+    // equal what the current scan wants ("" for the ambient scan), or a deathbed farewell
+    // would fire as small talk -- and small talk would fire at a deathbed.
+    {
+        char trig[16];
+        gd_str(root, "trigger", trig, sizeof trig, "");
+        if (strcmp(trig, wantTrigger_) != 0) return false;
+    }
 
     const bool repeatable = gd_bool(root, "repeatable", false);
     const bool seen       = isSeen(id);
@@ -348,10 +363,18 @@ bool ConversationSystem::gatePasses(void* json, const ConvContext& ctx, bool* ou
     if (ctx.friendship > jgate(w, "maxFriendship", 65535, 0, 65535)) return false;
     if (ctx.stage      < jgate(w, "minStage", 0, 0, 255)) return false;
     if (ctx.wins       < jgate(w, "minWins", 0, 0, 4294967295.0)) return false;
+    // Miracles granted so far: lets a second farewell acknowledge the first ("you're
+    // sitting with me again") instead of replaying itself verbatim.
+    if (ctx.reprieves  < jgate(w, "minReprieves", 0, 0, 255)) return false;
+    if (ctx.reprieves  > jgate(w, "maxReprieves", 255, 0, 255)) return false;
 
     if (!str_gate(w, "nature",  ctx.nature))  return false;
     if (!str_gate(w, "personality", ctx.trait)) return false;
     if (!str_gate(w, "species", ctx.species)) return false;
+    // Life-track gate ("prime"/"elderly"/"twilight" -- docs/death-and-lifespan.md §4): how
+    // aged conversation content is served. An unknown token in a modded file simply never
+    // matches, which is the loud no-op every other string gate gives a typo.
+    if (!str_gate(w, "life", ctx.life)) return false;
 
     // Mood gate. "upset" matches hurt OR angry, so one resolution conversation can cover both
     // without being written twice.
@@ -432,6 +455,20 @@ void ConversationSystem::choose()
 {
     if (resCount_ <= 0) return;
 
+    // Triggered searches take the best outright: farewell tiers are authored to outrank
+    // each other (bonded over trusted, a repeat visit over both), and a deathbed is not
+    // the moment for the anti-repetition roll below.
+    if (pickBest_) {
+        int best = 0;
+        for (int i = 1; i < resCount_; i++)
+            if (cand_rank(res_[i]) > cand_rank(res_[best])) best = i;
+        if (loadFile(res_[best].path, res_[best].entry)) {
+            pending_ = true;
+            ESP_LOGI(TAG, "triggered '%s' chosen from %d candidates", act_->id, resCount_);
+        }
+        return;
+    }
+
     // Weighted-random among the survivors, favouring the better-ranked ones. Keeps the pet
     // from opening with the same line every time.
     for (int i = 0; i < resCount_ - 1; i++)             // small n: simple selection sort
@@ -483,6 +520,12 @@ bool ConversationSystem::loadFile(const char* path, int entry)
     act_->repeatable = gd_bool(root, "repeatable", false);
     char startId[16];
     gd_str(root, "start", startId, sizeof startId, "");
+    // The fate fork's entry points, read HERE while the document is still alive -- the
+    // whole cJSON tree is freed the moment the nodes are marshalled, and the substitution
+    // pass below runs after that, on act_ alone.
+    char onDeath[16], onReprieve[16];
+    gd_str(root, "onDeath",    onDeath,    sizeof onDeath,    "");
+    gd_str(root, "onReprieve", onReprieve, sizeof onReprieve, "");
 
     cJSON* nodes = cJSON_GetObjectItem(root, "nodes");
     // NB: always delete `file`, never `root` -- with a pack, `root` is an element INSIDE it.
@@ -536,6 +579,38 @@ bool ConversationSystem::loadFile(const char* path, int entry)
         act_->nodeCount++;
     }
     cJSON_Delete(file);                              // freed at once: cJSON never holds two docs
+
+    // The fate fork (docs/death-and-lifespan.md §6): "@fate" jump targets resolve NOW, at
+    // load, to the entry point matching the roll that was persisted before this
+    // conversation was even searched for. The runtime never sees "@fate" -- so a dialogue
+    // choice structurally CANNOT steer the outcome, only witness it: fate has exactly one
+    // door, and it was walked through at the brink.
+    act_->fateIdx = -1;
+    {
+        const char* authored = (loadFate_ == FATE_MIRACLE) ? onReprieve : onDeath;
+        const char* target   = authored[0] ? authored : "end";   // missing half: end, loudly
+        bool warned = false, swapped = false;
+        for (int i = 0; i < act_->nodeCount; i++) {
+            ConvNode& nd = act_->nodes[i];
+            if (strcmp(nd.to, "@fate") == 0) {
+                if (!authored[0] && !warned) { warned = true;
+                    ESP_LOGW(TAG, "'%s': @fate with no matching on%s", act_->id,
+                             loadFate_ == FATE_MIRACLE ? "Reprieve" : "Death"); }
+                strncpy(nd.to, target, sizeof nd.to - 1); nd.to[sizeof nd.to - 1] = '\0';
+                swapped = true;
+            }
+            for (int j = 0; j < nd.choiceCount; j++)
+                if (strcmp(nd.choices[j].to, "@fate") == 0) {
+                    strncpy(nd.choices[j].to, target, sizeof nd.choices[j].to - 1);
+                    nd.choices[j].to[sizeof nd.choices[j].to - 1] = '\0';
+                    swapped = true;
+                }
+        }
+        // Remember WHERE fate lands so the scene can stage the moment (see Conversation).
+        if (swapped && authored[0])
+            for (int k = 0; k < act_->nodeCount; k++)
+                if (strcmp(act_->nodes[k].id, target) == 0) { act_->fateIdx = (int8_t)k; break; }
+    }
 
     // resolve choice + node continuation targets to node indices
     for (int i = 0; i < act_->nodeCount; i++) {
@@ -731,6 +806,29 @@ void ConversationSystem::update(float dt, const ConvContext& ctx, bool allowScan
         sinceScan_ = 0.0f;
         beginScan();
     }
+}
+
+bool ConversationSystem::triggeredStep(const char* trigger, const ConvContext& ctx, int budget)
+{
+    if (strcmp(wantTrigger_, trigger) != 0) {
+        // First call: take the scan machinery over. Ambient work in flight -- including a
+        // pending offer waiting as a bubble somewhere -- is discarded: whatever the pet
+        // wanted to chat about no longer applies at a deathbed.
+        abortScan();
+        pending_ = false;
+        strncpy(wantTrigger_, trigger, sizeof wantTrigger_ - 1);
+        wantTrigger_[sizeof wantTrigger_ - 1] = '\0';
+        pickBest_ = true;
+        loadFate_ = ctx.fate;             // "@fate" resolves against this at load time
+        beginScan();
+    }
+    if (scanning_) stepScan(ctx, budget);
+    if (scanning_) return false;          // more files to walk: call again next frame
+
+    wantTrigger_[0] = '\0';               // done (choose() already ran, argmax + load)
+    pickBest_ = false;
+    dirty_    = true;                     // ambient state was torn up; rescan when it may
+    return true;
 }
 
 void ConversationSystem::dismiss()

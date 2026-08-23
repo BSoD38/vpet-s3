@@ -278,8 +278,9 @@ void SceneBattle::drawResult()
         gfx_text((GAME_W - (int)strlen(tl) * 6) / 2, by + 78, 1, win ? col::good : col::warn, "%s", tl);
     }
 
-    if (outcome_.gotSick) {
-        const char* s = "caught a cold!";
+    if (outcome_.gotSick || outcome_.gotInjured) {
+        // A rough win costs a cold; a rough loss wounds (and a wound festers if ignored).
+        const char* s = outcome_.gotInjured ? "got injured!" : "caught a cold!";
         gfx_text((GAME_W - (int)strlen(s) * 6) / 2, by + 92, 1, col::warn, "%s", s);
     }
 

@@ -169,13 +169,18 @@ static ConvContext conv_ctx(const Pet& pet, const PersonalityTracker& drift)
     c.nature     = drift.natureId();
     c.trait      = drift.traitId();
     c.species    = pet.creature() ? pet.creature()->id : "";
-    c.sick       = p.sick != 0;
+    c.sick       = p.cond != COND_HEALTHY;   // any ailment (sick/injured/...) gates as "sick"
     c.hungry     = care_tier(p.hunger) <= CARE_TIER_NEEDY;   // == the attention-badge threshold
     c.asleep     = p.lightsOff != 0;
     c.hour       = pet.simHour();
     c.mood       = pet.moodId();
+    c.life       = life_track_id(pet.lifeTrack());
+    c.reprieves  = pet.vitals().savesUsed;
+    c.fate       = (uint8_t)pet.fate();   // meaningful only at a brink ("@fate" load)
     return c;
 }
+
+ConvContext App::convCtx() { return conv_ctx(pet, drift); }
 
 void App::setScene(SceneId id, Slide slide)
 {
@@ -197,6 +202,7 @@ void App::setScene(SceneId id, Slide slide)
         case SceneId::Home:       scenes.set(&home);       break;
         case SceneId::Feed:       scenes.set(&feedScene);  break;
         case SceneId::Conversation: scenes.set(&conversationScene); break;
+        case SceneId::Death:      scenes.set(&deathScene); break;
         case SceneId::Menu:       scenes.set(&menu);       break;
         case SceneId::Activities: scenes.set(&activities); break;
         case SceneId::Run:        scenes.set(&run);        break;
@@ -213,6 +219,7 @@ void App::setScene(SceneId id, Slide slide)
         case SceneId::Stats:    scenes.set(&stats);    break;
         case SceneId::Journal:  scenes.set(&journal);  break;
         case SceneId::Rename:   scenes.set(&rename);   break;
+        case SceneId::About:    scenes.set(&about);    break;
     }
 
     // Music follows the scene, decided here for the same reason the navigation sounds are:
@@ -223,15 +230,22 @@ void App::setScene(SceneId id, Slide slide)
     if (Scene* s = scenes.current()) audio::music(s->musicId());
 }
 
+void App::restartAfterDeath()
+{
+    pet.concludeDeath();     // generation++, save invalidated; the ledger was written earlier
+    ESP_LOGW("APP", "restarting into the next generation");
+    esp_restart();           // the fresh boot IS the fresh start (hatch, resets, clearSeen)
+}
+
 void App::init()
 {
     gfx_init();                       // create the back-buffer (after Display_Init in main)
-    home.bind(*this); feedScene.bind(*this); conversationScene.bind(*this);
+    home.bind(*this); feedScene.bind(*this); conversationScene.bind(*this); deathScene.bind(*this);
     menu.bind(*this); activities.bind(*this); run.bind(*this); mindmaze.bind(*this);
     smash.bind(*this); bulwark.bind(*this); stance.bind(*this);
     battle.bind(*this); battleSelect.bind(*this);
     settings.bind(*this); updateScene.bind(*this); cheats.bind(*this); timeset.bind(*this);
-    stats.bind(*this); journal.bind(*this); rename.bind(*this);
+    stats.bind(*this); journal.bind(*this); rename.bind(*this); about.bind(*this);
 
     // Process-wide, and must precede every parse below: keeps JSON trees out of internal heap.
     gamedata_json_use_psram();
@@ -260,6 +274,8 @@ void App::init()
     audio::settings_load(save);       // master/music/sfx volumes + mute, from NVS
     audio::bank_load();               // named sounds: gamedata, then packs, then loose SD
 
+    vitals_load_tuning();             // death/lifespan tuning, before pet.boot() ticks anything
+
     creatures.loadAll();              // load the creature roster before the pet resolves its id
     foods.loadAll();                  // food list (independent of the pet; needed by the Feed picker)
     personalities.loadAll();          // natures + traits, before any drift is evaluated
@@ -277,7 +293,10 @@ void App::init()
     // and journal don't belong to it. Player FACTS survive -- they're about the player.
     if (pet.startedFresh()) conversations.clearSeen();
     debugOverlay = save.loadU8("dbg", 0) != 0;
-    setScene(SceneId::Home);
+    // A brink held from a previous session (drawer, power-off, deep sleep) resumes INTO
+    // the death event -- never past it. The roll is long since persisted; the pet has
+    // simply been waiting for the player to be present (design rule 3).
+    setScene(pet.atBrink() ? SceneId::Death : SceneId::Home);
 
     power_mark_display_ready();        // panel is up: sleep helpers may now touch it
     power_.begin(esp_timer_get_time());
@@ -345,6 +364,17 @@ void App::runLoop()
         if (!transitioning_) scenes.input(in);         // ignore taps mid-slide
 
         pet.tick(dt * (float)pet.state().gameSpeed * careMult);   // gameSpeed × per-scene care factor
+        // The brink preempts everything: the moment the sim holds the pet at death's door,
+        // the event takes the screen. Scene-checked so it routes exactly once; scenes with
+        // careSpeed 0 (minigames/battle) can't get here, since their sim never advances.
+        // The conversation scene is exempt for BOTH its roles: as the deathbed farewell it
+        // IS the death event (yanking it back looped the prologue forever -- the pet is
+        // still atBrink() until the farewell resolves fate), and an ambient chat open when
+        // a natural brink lands should finish its sentence -- the sim is suspended, so
+        // nothing worsens while it does; the routing fires on the way out.
+        if (pet.atBrink() && scenes.current() != &deathScene
+                          && scenes.current() != &conversationScene)
+            setScene(SceneId::Death);
         // Time-sliced conversation selection: one file per frame, off the render path, so a
         // large modded library never costs a frame. Real time (not gameSpeed) on purpose.
         // MUST stay below the light-sleep `continue` above: with the screen off there is nobody
@@ -393,8 +423,9 @@ void App::runLoop()
         if (logAcc >= STATLOG_SECS) {
             logAcc = 0;
             const PetState& p = pet.state();
-            ESP_LOGI("GAME", "%s age=%.0f hun=%.0f hap=%.0f hp=%.0f poop=%u sick=%u",
-                     pet.stageName(), p.ageSecs, p.hunger, p.happiness, p.health, p.poop, p.sick);
+            ESP_LOGI("GAME", "%s age=%.0f hun=%.0f hap=%.0f hp=%.0f poop=%u cond=%u vit=%.0f",
+                     pet.stageName(), p.ageSecs, p.hunger, p.happiness, p.health, p.poop,
+                     p.cond, pet.vitals().vitality);
             ESP_LOGI("MEM", "free internal %u KB, psram %u KB",
                      (unsigned)(heap_caps_get_free_size(MALLOC_CAP_INTERNAL) / 1024),
                      (unsigned)(heap_caps_get_free_size(MALLOC_CAP_SPIRAM) / 1024));

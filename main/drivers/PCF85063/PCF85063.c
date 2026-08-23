@@ -13,6 +13,9 @@
 
 datetime_t datetime= {0};
 
+// Oscillator-stop flag as it stood BEFORE this boot touched anything (PCF85063_Lost_Clock).
+static bool s_lost_clock = false;
+
 static uint8_t decToBcd(int val);
 static int bcdToDec(uint8_t val);
 
@@ -25,6 +28,19 @@ Info:Initiate Normal Mode, RTC Run, NO reset, No correction , 24hr format, Inter
 ******************************************************************************/
 void PCF85063_Init()
 {
+	// Read the oscillator-stop flag FIRST: it says whether the backup cell held the clock
+	// up while the board was off, and any later write to the seconds register (the player
+	// setting the time) clears it. Clear it once we have it, so the next boot reports on
+	// the last power-off instead of repeating one old failure forever.
+	uint8_t Sec = 0;
+	if (I2C_Read(PCF85063_ADDRESS, RTC_SECOND_ADDR, &Sec, 1) == ESP_OK) {
+		s_lost_clock = (Sec & RTC_SECOND_OS) != 0;
+		if (s_lost_clock) {
+			uint8_t Clr = Sec & 0x7F;   // same seconds, flag cleared
+			I2C_Write(PCF85063_ADDRESS, RTC_SECOND_ADDR, &Clr, 1);
+		}
+	}
+
 	uint8_t Value = RTC_CTRL_1_DEFAULT|RTC_CTRL_1_CAP_SEL;
 
 	ESP_ERROR_CHECK(I2C_Write(PCF85063_ADDRESS, RTC_CTRL_1_ADDR, &Value, 1));
@@ -43,6 +59,11 @@ void PCF85063_Init()
 void PCF85063_Loop(void)
 {
   PCF85063_Read_Time(&datetime);
+}
+
+bool PCF85063_Lost_Clock(void)
+{
+	return s_lost_clock;
 }
 /******************************************************************************
 function:	Reset PCF85063

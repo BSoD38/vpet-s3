@@ -5,6 +5,10 @@ static const char *TAG_LCD = "ST7789";
 
 esp_lcd_touch_handle_t tp = NULL;
 
+// Which controller answered. The 2.8 ships with either, and it is the one reliable way to
+// tell the two board revisions apart from software (About screen / bug reports).
+const char *Touch_Model = "none";
+
 // LovyanGFX (game/display.cpp) owns the SPI bus and ST7789 panel now.
 // This module only owns the backlight (LEDC) and touch controller init.
 void LCD_Init(void)
@@ -12,10 +16,14 @@ void LCD_Init(void)
     Backlight_Init();
 
     esp_err_t ret = TOUCH_Init(&tp);
-    if (ret != ESP_OK) {
+    if (ret == ESP_OK) {
+        Touch_Model = "CST328";
+    } else {
         ESP_LOGW("Touch", "CST328 init failed, try CST3530");
         ret = TOUCH2_Init(&tp);
-        if (ret != ESP_OK) {
+        if (ret == ESP_OK) {
+            Touch_Model = "CST3530";
+        } else {
             ESP_LOGE("Touch", "CST3530 failed");
         }
     }

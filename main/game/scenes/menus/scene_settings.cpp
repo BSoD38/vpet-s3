@@ -2,16 +2,12 @@
 #include "core/app.hpp"
 #include "engine/gfx.hpp"
 #include "engine/util.hpp"        // clampf
-#include "engine/fw_update.hpp"   // fw_current_version (footer)
 #include "engine/audio/audio.hpp"
 #include "engine/audio/sfx.hpp"
 #include "ui/tabs.hpp"
 #include "ui/widgets.hpp"
 #include <cstring>
 #include <cstdio>
-
-static const int SPEEDS[] = { 1, 2, 5, 10, 20, 50, 100 };
-static const int SPEED_N  = (int)(sizeof(SPEEDS) / sizeof(SPEEDS[0]));
 
 // tab bar
 static const char* const TABS[] = { "GAME", "SOUND", "SYSTEM" };
@@ -53,13 +49,18 @@ static void slider_set(int i, float v)
     }
 }
 
-// GAME page: game-speed grid (two rows, ending at y226), then the care-freeze row under it
-static const int GRID_X0 = 7, GRID_Y = 140, BTN_W = 52, BTN_H = 38, BTN_GX = 6, BTN_GY = 10, COLS = 4;
-static const int FRZ_LBL_Y = 234, FRZ_Y = 248;
+// GAME page: the care-freeze row. (Game speed lives on the Cheats screen now, with the
+// other testing aids -- it accelerates the whole simulation, which was never a player
+// option so much as a way to watch weeks happen.)
+static const int FRZ_LBL_Y = 96, FRZ_Y = 110;
 
 // Full-width rows, shared by both pages
 static const int ROW_X = 16, ROW_W = GAME_W - 32, ROW_H = 34;
-static const int DBG_Y = 96, TIME_Y = 138, CHEAT_Y = 180, UPD_Y = 222, RESET_Y = 264;
+// The SYSTEM page carries six rows, which only fit at a slightly shorter row height and a
+// tighter pitch. It also gave up its "FW vX" footer: the About screen it now links to opens
+// with the same version string, alongside everything else worth quoting in a bug report.
+static const int SYS_H  = 30;
+static const int DBG_Y = 92, TIME_Y = 130, CHEAT_Y = 168, UPD_Y = 206, ABOUT_Y = 244, RESET_Y = 282;
 
 // Factory-reset confirm page: the erase button must be HELD for HOLD_S seconds (a tap,
 // however unlucky, can't wipe a save). Progress resets the moment the finger leaves.
@@ -67,14 +68,9 @@ static const float HOLD_S = 3.0f;
 static const Rect  kHold  { 30, 196, GAME_W - 60, 52 };
 static const Rect  kCancel{ 30, 266, GAME_W - 60, 40 };
 
-static Rect speed_btn(int i)
-{
-    return { GRID_X0 + (i % COLS) * (BTN_W + BTN_GX),
-             GRID_Y  + (i / COLS) * (BTN_H + BTN_GY), BTN_W, BTN_H };
-}
-
 // Full-width rows share x/width/height; only the y differs.
-static Rect sys_row(int y) { return { ROW_X, y, ROW_W, ROW_H }; }
+static Rect wide_row(int y) { return { ROW_X, y, ROW_W, ROW_H }; }   // GAME / SOUND
+static Rect sys_row(int y)  { return { ROW_X, y, ROW_W, SYS_H  }; }   // SYSTEM (six of them)
 
 void SceneSettings::onEnter()
 {
@@ -115,25 +111,11 @@ void SceneSettings::update(float dt)
 
 static void render_game(App& app)
 {
-    unsigned speed  = app.pet.state().gameSpeed;
-    bool     frozen = app.pet.frozen();
-
-    gfx_text(16, 88, 1, col::dim, "Game speed (1x = real time)");
-    // While frozen the multiplier is moot -- the clock it multiplies isn't running. The
-    // buttons stay live, though: picking the speed you want to come back to is a reasonable
-    // thing to do while packing.
-    if (frozen) gfx_text(16, 104, 2, kFrozenCol, "Now: paused");
-    else        gfx_text(16, 104, 2, col::good,  "Now: %ux", speed);
-    for (int i = 0; i < SPEED_N; i++) {
-        bool sel = ((unsigned)SPEEDS[i] == speed);
-        char lbl[8]; snprintf(lbl, sizeof lbl, "%dx", SPEEDS[i]);
-        uint16_t bg = sel ? (frozen ? rgb565(70, 92, 112) : col::accent) : rgb565(60, 64, 84);
-        speed_btn(i).button(lbl, bg, sel && !frozen ? col::black : col::white);
-    }
+    bool frozen = app.pet.frozen();
 
     // --- care freeze (Pet::setFrozen) ---
     gfx_text(16, FRZ_LBL_Y, 1, col::dim, "Care");
-    sys_row(FRZ_Y).fill(frozen ? kFrozenCol : rgb565(60, 64, 84));
+    wide_row(FRZ_Y).fill(frozen ? kFrozenCol : rgb565(60, 64, 84));
     gfx_text(ROW_X + 12, FRZ_Y + 10, 2, frozen ? col::black : col::white, "Freeze care");
     gfx_text(ROW_X + ROW_W - 38, FRZ_Y + 11, 2, frozen ? col::black : col::dim,
              frozen ? "ON" : "OFF");
@@ -173,7 +155,7 @@ static void render_sound(App& app)
     draw_slider(vol_slider(1), "Music",         slider_value(1), rgb565(120, 170, 240), m);
     draw_slider(vol_slider(2), "Effects",       slider_value(2), col::good, m);
 
-    sys_row(MUTE_Y).fill(m ? col::warn : rgb565(60, 64, 84));
+    wide_row(MUTE_Y).fill(m ? col::warn : rgb565(60, 64, 84));
     gfx_text(ROW_X + 12, MUTE_Y + 10, 2, m ? col::black : col::white, "Mute");
     gfx_text(ROW_X + ROW_W - 38, MUTE_Y + 11, 2, m ? col::black : col::dim, m ? "ON" : "OFF");
 
@@ -190,26 +172,28 @@ static void render_system(App& app)
 {
     bool dbg = app.debugOverlay;
     sys_row(DBG_Y).fill(dbg ? col::good : rgb565(60, 64, 84));
-    gfx_text(ROW_X + 12, DBG_Y + 10, 2, dbg ? col::black : col::white, "Debug info");
-    gfx_text(ROW_X + ROW_W - 38, DBG_Y + 11, 2, dbg ? col::black : col::dim, dbg ? "ON" : "OFF");
+    gfx_text(ROW_X + 12, DBG_Y + 7, 2, dbg ? col::black : col::white, "Debug info");
+    gfx_text(ROW_X + ROW_W - 38, DBG_Y + 8, 2, dbg ? col::black : col::dim, dbg ? "ON" : "OFF");
 
     sys_row(TIME_Y).fill(col::accent);
-    gfx_text(ROW_X + 12, TIME_Y + 10, 2, col::black, "Set Time/Date");
-    gfx_text(ROW_X + ROW_W - 18, TIME_Y + 11, 2, col::black, ">");
+    gfx_text(ROW_X + 12, TIME_Y + 7, 2, col::black, "Set Time/Date");
+    gfx_text(ROW_X + ROW_W - 18, TIME_Y + 8, 2, col::black, ">");
 
     sys_row(CHEAT_Y).fill(rgb565(120, 90, 150));
-    gfx_text(ROW_X + 12, CHEAT_Y + 10, 2, col::white, "Cheats / Debug");
-    gfx_text(ROW_X + ROW_W - 18, CHEAT_Y + 11, 2, col::white, ">");
+    gfx_text(ROW_X + 12, CHEAT_Y + 7, 2, col::white, "Cheats / Debug");
+    gfx_text(ROW_X + ROW_W - 18, CHEAT_Y + 8, 2, col::white, ">");
 
     sys_row(UPD_Y).fill(rgb565(70, 130, 200));
-    gfx_text(ROW_X + 12, UPD_Y + 10, 2, col::white, "System Update");
-    gfx_text(ROW_X + ROW_W - 18, UPD_Y + 11, 2, col::white, ">");
+    gfx_text(ROW_X + 12, UPD_Y + 7, 2, col::white, "System Update");
+    gfx_text(ROW_X + ROW_W - 18, UPD_Y + 8, 2, col::white, ">");
+
+    sys_row(ABOUT_Y).fill(rgb565(70, 120, 130));
+    gfx_text(ROW_X + 12, ABOUT_Y + 7, 2, col::white, "About");
+    gfx_text(ROW_X + ROW_W - 18, ABOUT_Y + 8, 2, col::white, ">");
 
     sys_row(RESET_Y).fill(col::warn);
-    gfx_text(ROW_X + 12, RESET_Y + 10, 2, col::white, "Factory Reset");
-    gfx_text(ROW_X + ROW_W - 18, RESET_Y + 11, 2, col::white, ">");
-
-    gfx_text(16, 306, 1, col::dim, "FW v%s", fw_current_version());
+    gfx_text(ROW_X + 12, RESET_Y + 7, 2, col::white, "Factory Reset");
+    gfx_text(ROW_X + ROW_W - 18, RESET_Y + 8, 2, col::white, ">");
 }
 
 // Confirmation page for the factory reset. Deliberately its own screen (not a small
@@ -268,6 +252,7 @@ void SceneSettings::onInput(const Input& in)
         if (kBack.contains(in) || kCancel.contains(in)) {
             confirmReset_ = false;
             holdT_ = 0.0f;
+            sfx::play(sfx::kBack);              // an in-scene page, so setScene can't voice it
         }
         return;
     }
@@ -278,7 +263,11 @@ void SceneSettings::onInput(const Input& in)
     }
 
     int tab = tabbar_hit(in.x, in.y, TAB_X, TAB_Y, TAB_W, TAB_H, TAB_N);
-    if (tab >= 0) { page_ = tab; dragSlider_ = -1; return; }
+    if (tab >= 0) {
+        if (tab != page_) sfx::play(sfx::kTap);   // re-tapping the open tab changes nothing
+        page_ = tab; dragSlider_ = -1;
+        return;
+    }
 
     if (page_ == 1) {
         for (int i = 0; i < SLIDER_N; i++) {
@@ -288,7 +277,7 @@ void SceneSettings::onInput(const Input& in)
             slider_set(i, (float)(in.x - r.x) / (float)r.w);
             return;
         }
-        if (sys_row(MUTE_Y).contains(in)) {
+        if (wide_row(MUTE_Y).contains(in)) {
             audio::set_muted(!audio::muted());
             audio::settings_store(app().save);
             // Deliberately after the toggle: unmuting is confirmed by hearing it, and
@@ -302,20 +291,16 @@ void SceneSettings::onInput(const Input& in)
     if (page_ == 0) {
         // A plain toggle, no hold-to-confirm: freezing costs nothing and thawing undoes it
         // exactly, so the factory-reset ceremony would only make the mode annoying to use.
-        if (sys_row(FRZ_Y).contains(in)) {
+        if (wide_row(FRZ_Y).contains(in)) {
             app().pet.setFrozen(!app().pet.frozen());
+            sfx::play(sfx::kSelect);           // a commitment, not a browse: the firmer click
             return;
-        }
-        for (int i = 0; i < SPEED_N; i++) {
-            if (speed_btn(i).contains(in)) {
-                app().pet.setGameSpeed((uint16_t)SPEEDS[i]);
-                return;
-            }
         }
     } else {
         if (sys_row(DBG_Y).contains(in)) {
             app().debugOverlay = !app().debugOverlay;
             app().save.storeU8("dbg", app().debugOverlay ? 1 : 0);
+            sfx::play(sfx::kTap);
             return;
         }
         if (sys_row(TIME_Y).contains(in)) {
@@ -330,9 +315,14 @@ void SceneSettings::onInput(const Input& in)
             app().setScene(SceneId::Update, Slide::Forward);
             return;
         }
+        if (sys_row(ABOUT_Y).contains(in)) {
+            app().setScene(SceneId::About, Slide::Forward);
+            return;
+        }
         if (sys_row(RESET_Y).contains(in)) {
             confirmReset_ = true;
             holdT_ = 0.0f;
+            sfx::play(sfx::kTap);              // in-scene page swap; setScene isn't involved
             return;
         }
     }

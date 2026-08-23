@@ -2,6 +2,7 @@
 #include "core/app.hpp"
 #include "engine/gfx.hpp"
 #include "engine/clock.hpp"
+#include "sim/lineage.hpp"   // the In Memory page renders the lineage ledger
 #include "ui/widgets.hpp"
 #include "ui/tabs.hpp"
 #include <cstdio>
@@ -14,14 +15,19 @@ static const int PAD_X  = 12;
 
 static const int ROW_MEM  = 30;   // one memory: title + when
 static const int ROW_FACT = 40;   // one fact: up to two wrapped lines
+static const int ROW_LIN  = 40;   // one predecessor: name/gen + lived/stage/bond
 
-static const char* const TABS[2] = { "Memories", "About You" };
+static const char* const TABS[3] = { "Memories", "About You", "In Memory" };
+static const int TAB_N = 3;
 
-static int row_h(int tab) { return tab == 0 ? ROW_MEM : ROW_FACT; }
+static int row_h(int tab) { return tab == 0 ? ROW_MEM : tab == 1 ? ROW_FACT : ROW_LIN; }
 
 // "just now" / "4h ago" / "3d ago" -- a diary wants elapsed time, not a timestamp.
 static void ago_str(uint32_t when, char* out, int n)
 {
+    // Stamped while the RTC had no trustworthy time (clock_now() returns 0 then), so a
+    // difference against a clock that has since been set would be decades of nonsense.
+    if (when == 0) { snprintf(out, n, "earlier"); return; }
     uint32_t now = clock_now();
     uint32_t d = (now > when) ? (now - when) : 0;    // guard a re-set RTC
     if      (d < 60)      snprintf(out, n, "just now");
@@ -39,7 +45,9 @@ void SceneJournal::onEnter()
 void SceneJournal::render()
 {
     const ConversationSystem& cv = app().conversations;
-    const int n = (tab_ == 0) ? cv.journalCount() : cv.factCount();
+    const int n = (tab_ == 0) ? cv.journalCount()
+                : (tab_ == 1) ? cv.factCount()
+                              : lineage_count(app().save);
 
     fb.fillScreen(col::panel);
     gfx_text(PAD_X, 14, 3, col::accent, "JOURNAL");
@@ -48,11 +56,12 @@ void SceneJournal::render()
     char plbl[40];
     gfx_text(PAD_X, 46, 1, col::white, "%s", app().drift.label(plbl, sizeof plbl));
 
-    tabbar_draw(PAD_X, TAB_Y, GAME_W - 2 * PAD_X, TAB_H, TABS, 2, tab_);
+    tabbar_draw(PAD_X, TAB_Y, GAME_W - 2 * PAD_X, TAB_H, TABS, TAB_N, tab_);
 
     if (n == 0) {
         const char* msg = (tab_ == 0) ? "Nothing to remember yet."
-                                      : "They haven't learned anything\nabout you yet.";
+                        : (tab_ == 1) ? "They haven't learned anything\nabout you yet."
+                                      : "No one has been lost.";
         gfx_text_wrap(PAD_X + 8, LIST_Y + 24, GAME_W - 2 * PAD_X - 16, 1, col::dim, msg, 6);
         draw_back();
         return;
@@ -71,7 +80,7 @@ void SceneJournal::render()
             // Title is data-driven, so fit it to the space left beside the timestamp.
             gfx_text_fit(card.x + 8, row.y + 7, card.w - 70, 1, col::white, "%s", e.title);
             gfx_text(card.x + card.w - 58, row.y + 7, 1, col::dim, "%s", when);
-        } else {
+        } else if (tab_ == 1) {
             const ConvFact& f = cv.factAt(i);
             // Prefer the writer's phrasing; fall back to the raw pair so a fact set without a
             // note is still visible rather than silently blank.
@@ -79,6 +88,23 @@ void SceneJournal::render()
                 gfx_text_wrap(card.x + 8, row.y + 6, card.w - 16, 1, col::white, f.note, 3, -1, 2);
             else
                 gfx_text_fit(card.x + 8, row.y + 6, card.w - 16, 1, col::dim, "%s: %s", f.key, f.val);
+        } else {
+            LineageRecord rec{};
+            if (!lineage_get(app().save, i, &rec)) continue;
+            // Species id -> display name while the species is still installed; the raw id
+            // is an honest fallback for a mod creature whose pack has since been removed.
+            int ci = app().creatures.indexOf(rec.speciesId);
+            const char* species = ci >= 0 ? app().creatures.at(ci).name : rec.speciesId;
+            char days[16];
+            snprintf(days, sizeof days, "%ud", (unsigned)(rec.ageSecs / 86400u));
+            gfx_text_fit(card.x + 8, row.y + 6, card.w - 60, 1, col::white, "Gen %u  %s",
+                         (unsigned)rec.generation,
+                         rec.nickname[0] ? rec.nickname : species);
+            gfx_text(card.x + card.w - 8 - (int)strlen(days) * 6, row.y + 6, 1, col::dim,
+                     "%s", days);
+            gfx_text_fit(card.x + 8, row.y + 20, card.w - 16, 1, col::dim, "%s - %s%s",
+                         stage_name(rec.stage), friendship_tier_name(rec.friendship),
+                         rec.cause == (uint8_t)BRINK_OLDAGE ? ", a full life" : "");
         }
     }
     list_.endClip();
@@ -95,8 +121,9 @@ void SceneJournal::onInput(const Input& in)
     }
 
     if (in.pressed) {
-        int t = tabbar_hit(in.x, in.y, PAD_X, TAB_Y, GAME_W - 2 * PAD_X, TAB_H, 2);
+        int t = tabbar_hit(in.x, in.y, PAD_X, TAB_Y, GAME_W - 2 * PAD_X, TAB_H, TAB_N);
         if (t >= 0 && t != tab_) {
+            sfx::play(sfx::kTap);
             tab_ = t;
             list_.geom(0, LIST_Y, GAME_W, VIEW_H, row_h(tab_));   // row height differs per page
             list_.reset();
@@ -105,6 +132,8 @@ void SceneJournal::onInput(const Input& in)
     }
 
     const ConversationSystem& cv = app().conversations;
-    const int n = (tab_ == 0) ? cv.journalCount() : cv.factCount();
+    const int n = (tab_ == 0) ? cv.journalCount()
+                : (tab_ == 1) ? cv.factCount()
+                              : lineage_count(app().save);
     list_.update(in, n);   // scrollable; rows aren't tappable (nothing to open yet)
 }

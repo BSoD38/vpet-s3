@@ -48,6 +48,11 @@ extern LGFX_Sprite fb;
 void gfx_init();                                        // create back-buffer (after Display_Init)
 void gfx_present();                                     // push back-buffer to the panel
 void gfx_snapshot();                                    // copy fb -> transition buffer (freeze outgoing scene)
+// Darken the WHOLE frame toward black: k=0 leaves it, k>=1 blacks it. The panel stack has
+// no alpha compositing, so this is the engine's substitute for a fade overlay -- a
+// per-channel multiply over the back-buffer (a few ms; fine for a fade's worth of frames).
+// Call at the END of a scene's render, after everything else is drawn.
+void gfx_fade(float k);
 void gfx_present_cover(int fbX, uint16_t gapColor);     // old base; new (fb) covers/overshoots in from right
 void gfx_present_reveal(int snapX, uint16_t gapColor);  // new (fb) base; old (snap) slides off (anticipation)
 void gfx_present_iris(bool useSnap, int radius);        // circular iris on snap (old) or fb (new)

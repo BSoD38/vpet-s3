@@ -1,0 +1,27 @@
+{
+  "_comment": "Death & lifespan tuning (docs/death-and-lifespan.md §11). All values are first guesses, expected to change with play-testing. Every key is optional: a mod or loose /sdcard/config/vitals.json that sets one key overrides just that key.",
+
+  "vitMax": 10000,
+  "baseDrainPerDay": 33.3,
+  "multBest": 0.7,
+  "multWorst": 3.5,
+  "emaTauHrs": 48,
+  "mistakeChip": 40,
+  "sickBadPerDay": 1500,
+  "sickEscalateHrs": 12,
+  "injuryFesterHrs": 24,
+  "elderlyFrac": 0.15,
+  "twilightFrac": 0.03,
+
+  "elderlyStepMult": 1.6,
+  "twilightStepMult": 2.2,
+  "elderlyExtraSleepHrs": 1,
+  "twilightExtraSleepHrs": 2,
+
+  "miracleMax": 0.85,
+  "miracleBondFloor": 4000,
+  "critRestoreFrac": 0.30,
+  "scarMult": 0.85,
+  "reprieveFrac": 0.05,
+  "recoveryDays": 3
+}

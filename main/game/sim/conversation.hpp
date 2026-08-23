@@ -95,6 +95,10 @@ struct Conversation {
     ConvNode nodes[CONV_MAX_NODES];
     uint8_t  nodeCount;
     int8_t   startIdx;
+    // The node the "@fate" jump resolved to at load, or -1 when the conversation has no
+    // fate fork. Entering this node IS the moment fate lands, and the scene stages it
+    // (the silence, the flash) off this index rather than re-deriving anything.
+    int8_t   fateIdx;
 };
 
 // One remembered conversation. Keeps the canonical id AND a cached title: the design intent
@@ -129,6 +133,9 @@ struct ConvContext {
     bool        asleep;
     int         hour;        // 0..23 sim hour
     const char* mood;        // "ok" / "hurt" / "angry"; gates may also ask for "upset"
+    const char* life;        // "prime" / "elderly" / "twilight" (life_track_id)
+    uint8_t     reprieves;   // miracles this pet has been granted (gates farewell variants)
+    uint8_t     fate;        // Fate of the CURRENT brink; read only when loading "@fate"
 };
 
 // --- bounded memory (doc 5.6) --------------------------------------------------------------
@@ -158,6 +165,15 @@ public:
     const Conversation& active()  const { return *act_; }
     void                dismiss();                 // player closed it without finishing
     void                finish();                  // ran to the end: mark seen + start cooldown
+
+    // Drive a TRIGGERED search (e.g. "deathbed"): call each frame with a small file budget
+    // until it returns true (search complete); pending() then says whether an eligible
+    // conversation was found and loaded. Unlike the ambient path: any ambient work (and a
+    // pending ambient offer) is discarded on the first call, only entries whose "trigger"
+    // matches are considered, and the BEST-ranked candidate wins outright -- specificity
+    // between farewell tiers is authored, not rolled. Callers must STOP calling once it
+    // returns true, or the search restarts. "@fate" targets resolve against ctx.fate.
+    bool triggeredStep(const char* trigger, const ConvContext& ctx, int budget = 2);
 
     // Facts: the memory of the player's answers, and the mechanism behind conversations that
     // depend on earlier choices.
@@ -219,6 +235,13 @@ private:
     uint32_t ctxHash_    = 0;
     bool     dirty_      = true;
     uint16_t lastFriendship_ = 0;   // latched from ctx; the next gap is rolled against it
+
+    // Triggered-search state (see triggeredStep). wantTrigger_ doubles as the gate every
+    // scan applies: ambient scans want "" (untriggered entries only), so a deathbed
+    // farewell can never fire as small talk -- nor small talk at a deathbed.
+    char    wantTrigger_[16]{};
+    bool    pickBest_ = false;      // choose(): argmax instead of the weighted roll
+    uint8_t loadFate_ = 0;          // Fate to resolve "@fate" against at load time
 
     ConvFact facts_[CONV_MAX_FACTS];
     int      factCount_ = 0;

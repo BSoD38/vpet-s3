@@ -29,9 +29,18 @@ static const MenuEntry OPTS[] = {
 };
 static const int OPT_N = (int)(sizeof(OPTS) / sizeof(OPTS[0]));
 
-// The gated entries are shut for two unrelated reasons; only one hint fits, and the freeze
-// wins it because it's the one the player can act on from here.
-static bool gate_closed(const Pet& pet) { return !pet.activitiesUnlocked() || pet.frozen(); }
+// The gated entries can be shut for three unrelated reasons; only one hint fits. The freeze
+// wins it (it's the one the player can act on from here). The stage lock outranks the
+// condition: telling a sick NEWBORN "treat it first" would promise an unlock that treating
+// alone can't deliver.
+static const char* gate_hint(const Pet& pet)   // nullptr = gate open
+{
+    if (pet.frozen())              return "Care paused (Settings > Game)";
+    if (!pet.activitiesUnlocked()) return "Locked until In-Training II";
+    if (pet.conditionBlocked())    return "Too unwell - treat or rest first";
+    return nullptr;
+}
+static bool gate_closed(const Pet& pet) { return gate_hint(pet) != nullptr; }
 
 void SceneMenu::render()
 {
@@ -47,12 +56,13 @@ void SceneMenu::render()
     }
 
     if (closed) {   // explain why Battle/Activities are greyed out
+        const char* hint = gate_hint(app().pet);
         bool frozen = app().pet.frozen();
-        const char* hint = frozen ? "Care paused (Settings > Game)"
-                                  : "Locked until In-Training II";
         int hw = (int)strlen(hint) * 6;
         gfx_text((GAME_W - hw) / 2, OPT_Y + OPT_N * (OPT_H + OPT_G) + 2, 1,
-                 frozen ? kFrozenCol : col::dim, "%s", hint);
+                 frozen ? kFrozenCol
+                        : app().pet.conditionBlocked() ? col::warn : col::dim,
+                 "%s", hint);
     }
 
     draw_back();

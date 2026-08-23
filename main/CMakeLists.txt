@@ -11,6 +11,7 @@ idf_component_register(
                               "./game/engine/gfx.cpp"
                               "./game/engine/input.cpp"
                               "./game/engine/clock.cpp"
+                              "./game/engine/battery.cpp"
                               "./game/engine/power.cpp"
                               "./game/engine/fw_update.cpp"
                               "./game/engine/pakfs.cpp"
@@ -27,6 +28,8 @@ idf_component_register(
 
                               # game: sim (simulation state + persistence)
                               "./game/sim/pet.cpp"
+                              "./game/sim/vitals.cpp"
+                              "./game/sim/lineage.cpp"
                               "./game/sim/training.cpp"
                               "./game/sim/creatures.cpp"
                               "./game/sim/foods.cpp"
@@ -42,6 +45,7 @@ idf_component_register(
                               "./game/scenes/care/scene_home.cpp"
                               "./game/scenes/care/scene_feed.cpp"
                               "./game/scenes/care/scene_conversation.cpp"
+                              "./game/scenes/care/scene_death.cpp"
                               "./game/scenes/minigames/scene_run.cpp"
                               "./game/scenes/minigames/scene_mindmaze.cpp"
                               "./game/scenes/minigames/scene_smash.cpp"
@@ -56,6 +60,7 @@ idf_component_register(
                               "./game/scenes/menus/scene_update.cpp"
                               "./game/scenes/menus/scene_cheats.cpp"
                               "./game/scenes/menus/scene_timeset.cpp"
+                              "./game/scenes/menus/scene_about.cpp"
                               "./game/scenes/menus/scene_stats.cpp"
                               "./game/scenes/menus/scene_journal.cpp"
                               "./game/scenes/menus/scene_rename.cpp"

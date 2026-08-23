@@ -317,6 +317,7 @@ void CreatureRegistry::scanRoot(const char* root, const char* srcTag)
         int idx = upsert(c.id);
         if (idx < 0) { ESP_LOGW(TAG, "registry full; dropped '%s'", c.id); continue; }
         list_[idx] = c;                            // append or override (SD wins)
+        if (gd_src_is_sd(srcTag)) gd_sd_loaded(GD_CREATURES);   // About screen's mod tally
         ESP_LOGI(TAG, "%s: '%s' (%s) tier %u", srcTag, c.id, c.name, c.tier);
     }
     closedir(d);

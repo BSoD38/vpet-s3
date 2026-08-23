@@ -65,6 +65,26 @@ data set rather than one creature. That is what the update system's per-partitio
 and boot repair (docs/firmware-updates.md) exist to catch, and `pakfs` rejects a pack whose
 table of contents fails validation rather than serving garbage from it.
 
+### Checking what actually loaded
+
+**Settings → SYSTEM → About** reports both layers, because they fail differently:
+
+* **MOD PACKS** — each mounted pack, by mount point and `.pak` filename. A pack either
+  mounts or it doesn't, so its presence in this list is the whole story.
+* **LOOSE SD FILES** — a per-system count of the entries each registry *accepted* from the
+  loose layer (creatures, foods, natures, traits, sounds, config), plus a total. Loose files
+  fail one at a time and silently — wrong folder name, malformed JSON, a card that didn't
+  mount — so a folder of creatures showing `0` is exactly the symptom this is here to catch.
+  When the card isn't mounted the section says so instead of showing six zeroes.
+
+Conversations are the one system with nothing to report at load time: the scanner walks the
+card lazily, per question asked, so there is no boot-time tally to keep. About counts the
+*files* under `/sdcard/conversations/<pool>/` and the current creature's own folder instead,
+once on entry (FAT directory opens are ~10 ms each, far too slow for the refresh timer).
+
+The counters are bumped where each loader accepts an entry (`gd_sd_loaded()` in
+`sim/gamedata.hpp`) — one line per accept site, nothing threaded through the registries.
+
 ### Limits
 
 * at most **4** packs mounted (`PAKFS_MAX_PAKS`); extras are logged and ignored

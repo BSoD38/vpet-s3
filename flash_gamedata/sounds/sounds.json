@@ -131,5 +131,12 @@
     "id": "bgm_battle", "bus": "music", "loop": true,
     "rtttl": "Battle:d=8,o=5,b=162:a4,a4,c,a4,e,a4,c,e,a4,a4,c,a4,g,e,d,c,a4,a4,c,a4,e,a4,c,e,f,e,d,c,4a4,4p",
     "wave": "pulse", "duty": 0.3, "attack": 0.004, "release": 0.03, "vol": 0.30
+  },
+  {
+    "_comment": "The farewell (docs/death-and-lifespan.md par.7). Plays during the death",
+    "_comment2": "event and NOWHERE else, so it stays sacred -- do not reuse this id.",
+    "id": "bgm_farewell", "bus": "music", "loop": true,
+    "rtttl": "Farewell:d=4,o=5,b=60:2a4,c,2e,d,c,1b4,2p,e,c,2a4,2g4,1a4,1p,2p",
+    "wave": "sine", "attack": 0.05, "release": 0.3, "vol": 0.26
   }
 ]

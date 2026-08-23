@@ -24,6 +24,14 @@ The original idea was to offload background processing to the ULP. We didn't, on
 - **Pet care across sleep is already solved.** [`Pet::boot()`](../main/game/sim/pet.cpp)
   runs an *offline catch-up*: it replays `tick()` over the elapsed real seconds (in 60 s
   steps, capped at 24 h). Deep sleep is just "offline", so the exact same code applies.
+- **A clock that moved is not an absence.** The elapsed delta is only trusted when it can be
+  one: a saved baseline of 0 (written while the RTC read a pre-`CLOCK_YEAR_MIN` date, i.e.
+  after it lost power) or a gap over 30 days means the clock was set, reset, or had its
+  backup battery changed, and `Pet::boot()` replays *nothing*. Capping such a jump at 24 h
+  instead is what once brought a creature back evolved, starving and at 0 HP after nothing
+  more than setting the time and power-cycling. For the same reason the clock-setting screen
+  re-anchors the baseline with `markSavedAt(clock_epoch(t))` — the time it just wrote, since
+  the shared `datetime` snapshot still holds the old one for up to ~100 ms.
 - **The ULP can't run the sim.** `tick()` is float-heavy (`expf`, decay rates) and evolution
   reads the creature registry loaded from flash/SD. The ULP-RISC-V has no FPU, ~8 KB of RTC
   RAM, and no access to that data — it would mean a hand-ported fixed-point *duplicate* of
@@ -162,6 +170,111 @@ All gestures are classified on **release** (see `PowerManager::update`):
 The press that wakes from light sleep is *consumed* so it isn't also read as a hold. On deep
 sleep entry we wait for the button to be released before arming the GPIO wake, so the board
 doesn't instantly re-wake on the same press.
+
+## Battery gauge and charging
+
+The only battery signal that reaches the ESP32 is an ADC on GPIO8 (a divider off the pack,
+`drivers/BAT_Driver`). There is **no charge-status line**: the board's charging LED is wired
+straight to the charger chip, and nothing tells the MCU that USB is plugged in. So
+`game/engine/battery.cpp` reads both the level and the charging state out of that one voltage.
+
+### Level, and why it calibrates itself
+
+Voltage is a poor fuel gauge, but it must at least not be *linear*: the old straight
+3.0–4.2 V ramp called a half-empty 3.7 V pack 58%, so the icon sat near the middle for days
+and then dropped off a cliff. It now interpolates the usual single-cell rest curve, which is
+flat in the middle and steep at both ends.
+
+That curve is written for a textbook cell measured at rest, and this board measures none of
+those things. It reads through an uncalibrated divider (a ×3 resistor pair and a fudge
+factor), it reads while the board is *running*, and it reads ~150 mV higher with a charger
+attached than without. On the observed hardware a full pack reads **4.17–4.18 V charging and
+~4.01 V on battery** — so a curve that thinks 4.20 V is full can never reach 100%, and reports
+79% for a pack that was just fully charged.
+
+Rather than guess at the divider, the pack or the load, the gauge **learns the two voltages
+that matter** and slides the curve onto whichever applies:
+
+| Anchor | What it is | How it's measured |
+|--------|------------|-------------------|
+| `vFull` | what a full pack reads **while charging** | the charge plateau (below) |
+| `vLoadFull` | what the same pack reads **on battery** | 60 s after unplugging a charge that had reached that plateau |
+
+Both are kept in their own NVS namespace (`bat`) — they describe the *hardware*, not the save,
+so a factory reset has no business clearing them. Until they're measured, 4.20 / 4.08 stand in;
+the About screen marks that with `est`.
+
+This one mechanism fixes three things at once:
+
+- **Reaching 100%.** The charger's own plateau *is* full, whatever it reads.
+- **Divider calibration.** Whatever the resistor pair is doing, both anchors absorb it.
+- **The plug-in jump.** When a charger is attached, the reading steps up ~150 mV *and* the
+  anchor steps up by the same amount, so the two cancel and the percentage stays put. This is
+  a measured cancellation, not the assumed offset it replaces.
+
+What's left is the residue — charge current tapers near the top, cell resistance rises as the
+pack empties — so the displayed percentage is still rate-limited to 1%/s. Anything the anchors
+don't predict arrives as a slow walk instead of a jump.
+
+### Full, and the plateau
+
+A charger's last phase holds the pack at a fixed voltage while the current tapers away. So
+once the reading **stops climbing** near the top, charging is essentially done — and that is
+both the "charged" state and the moment `vFull` is learned. It needs no schematic, no divider
+calibration and no pack datasheet.
+
+The test is 5 minutes without moving more than 8 mV, above 4.05 V. Late constant-current
+charging also looks flat if you squint, hence the tight band over a long window: a few
+mV/minute of climb keeps resetting the clock, a charger holding station does not. (Residual
+noise after the driver's 16-sample average and EMA is only 1–2 mV, so the band can be that
+tight.) `full` latches until the charger is removed, so a couple of mV of wobble can't knock
+the gauge back off 100%.
+
+On a device that has **never** seen a full charge, the plateau doubles as a charger detector —
+and it has to, or a board that boots onto an already-finished charge can never calibrate: no
+step to catch, a plateau is not a climb, and the derived threshold in the table below needs the
+very calibration it is blocking. A reading that hasn't moved 8 mV in five minutes that high up
+cannot be a pack running the board; that falls measurably. Once calibrated the derived
+threshold handles the boot case properly and the inference switches off — it's a bootstrap,
+not a rule.
+
+### Charging detection
+
+Three signals, covering different situations:
+
+| Signal | What it catches |
+|--------|-----------------|
+| Reading above `vLoadFull` + 100 mV | `vLoadFull` is *by definition* the highest this board reads on battery (a full pack under our own load), so anything above it plus margin is a charger. Capped at 4.25 V before it has been learned. This is the only test that fires when the board **boots on a charger that has already finished** — no step to catch, and a plateau is by definition not climbing. The margin covers the load getting lighter than it was when the anchor was measured (light sleep turns the backlight off, which lifts the reading). |
+| Reading rises ≥ 70 mV above its recent floor | The **plug-in step**: the cell current swings from supplying the board to absorbing half an amp, and the terminal jumps well over 100 mV inside the filter's couple of seconds. A discharging pack never does that. |
+| Reading climbs across two consecutive 150 s windows | Booting with the charger **already attached** — no step to catch, and the constant-current climb is far too slow for the row above. A big load coming off (leaving a minigame) also lifts the reading once, which is why the climb has to continue into a second window. |
+
+Unplugging is the mirror of the step: a fall of ≥50 mV from the recent ceiling. Both envelopes
+restart on every transition — otherwise the pre-plug floor would immediately re-trigger
+"charging" the moment we let go of it.
+
+Consequence: the plug-in the player actually sees is detected in seconds. Booting onto a
+charger is caught immediately once calibrated (the reading is above anything the pack can do
+alone), or within ~5 minutes of watching it climb if it isn't. Either way it self-corrects,
+which is the best a device with no status line can do.
+
+### Where it shows
+
+- **Home HUD:** a lightning bolt left of the battery icon while charging, and the fill turns
+  green regardless of level (a red icon with a bolt would read as a fault).
+- **Settings → SYSTEM → About:** the raw voltage, the percentage, the charger state, and
+  `Full reads` — the two learned anchors (`est` while they're still assumed). Those two numbers
+  explain any percentage the gauge reports, so they are the first thing to look at when one
+  looks wrong. With the debug overlay on, the `Level` row also shows the value before rate
+  limiting.
+
+### The RTC backup cell
+
+The coin cell on the RTC header has no voltage sense anywhere on the board, so **there is no
+level to report**. What the PCF85063 does expose is its oscillator-stop flag: set whenever the
+chip's clock has stopped, cleared only by writing the seconds register. `PCF85063_Init()` reads
+it before anything else can touch it and then clears it, so the About screen can say whether
+the cell kept the clock running through the *last* power-off — which is the cell's whole job.
+That is the closest thing to a health readout the hardware allows.
 
 ## Hardware caveats (verify on device)
 

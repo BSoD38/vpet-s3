@@ -82,6 +82,9 @@ void power_service_timer_wake(SaveStore& save)
     // Heap-allocated: the registries are ~15 KB and app_main's stack is small.
     CreatureRegistry* reg = new CreatureRegistry();
     reg->loadAll();
+    // Vitality drains through the same replay, so the drain tuning must match what the
+    // running game uses -- otherwise a modded config would only apply while awake.
+    vitals_load_tuning();
     // The personality tracker MUST ride along, exactly as App::init wires it before
     // pet.boot(): this headless path replays the elapsed window and persists lastUpdate,
     // so any drift it skips is gone forever. Since an idle device lives almost entirely

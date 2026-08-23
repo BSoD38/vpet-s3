@@ -19,7 +19,10 @@
 
 // One footfall per Idle frame. This is therefore not just a cosmetic cadence: it sets how
 // fast a walking creature covers ground (WALK_STRIDE px per frame, engine/walk.hpp), so the
-// two constants are a tuning PAIR -- shortening this speeds the creature up.
+// two constants are a tuning PAIR -- shortening this speeds the creature up. The DEFAULT:
+// setStepSecs() stretches it per instance (an Elderly/Twilight creature walks slower --
+// docs/death-and-lifespan.md §4), and because travel derives from the phase, the gait and
+// the ground speed slow together with no second clock to fight.
 constexpr float ANIM_STEP_SECS = 0.45f;
 
 enum class Anim : uint8_t {
@@ -38,6 +41,7 @@ enum class Anim : uint8_t {
 class CreatureAnim {
 public:
     void setBase(Anim a)             { base_ = a; }
+    void setStepSecs(float s)        { stepSecs_ = s > 0.05f ? s : 0.05f; }   // footfall period
     void react(Anim a, float secs)   { overlay_ = a; overlayLeft_ = secs; }
     void face(bool mirrored)         { facing_ = mirrored; }   // movement facing (scene decides)
     void tick(float dt)              { t_ += dt; if (overlayLeft_ > 0.0f) overlayLeft_ -= dt; }
@@ -51,7 +55,7 @@ public:
     // Progress through the current footfall, 0..1, hitting exactly 0 at every frame change
     // (same divisor as flip()). Travel derived from this cannot skate: change the frame
     // rate, the step cadence or dt and the feet still land where the ground says they do.
-    float stepPhase() const          { return fmodf(t_, ANIM_STEP_SECS) / ANIM_STEP_SECS; }
+    float stepPhase() const          { return fmodf(t_, stepSecs_) / stepSecs_; }
 
     // Left-to-right flip for the blit. Nope has a single frame and animates DMC-style by
     // alternating flipped/unflipped rapidly (a head-shake); otherwise it's the walk facing.
@@ -65,7 +69,7 @@ public:
     {
         Anim a = reacting() ? overlay_ : base_;
         switch (a) {
-            case Anim::Idle:   return flip(ANIM_STEP_SECS) ? FRM_IDLE2 : FRM_IDLE1;
+            case Anim::Idle:   return flip(stepSecs_) ? FRM_IDLE2 : FRM_IDLE1;
             case Anim::Happy:  return FRM_HAPPY;
             case Anim::Angry:  return FRM_ANGRY;
             case Anim::Train:  return flip(0.35f) ? FRM_TRAIN2 : FRM_TRAIN1;
@@ -91,4 +95,5 @@ private:
     bool  facing_      = false;
     float overlayLeft_ = 0.0f;
     float t_           = 0.0f;
+    float stepSecs_    = ANIM_STEP_SECS;
 };
