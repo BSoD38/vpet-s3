@@ -21,9 +21,6 @@
   "evolutions": [
     {
       "to": "botamon"
-    },
-    {
-      "to": "nibbling"
     }
   ],
   "id": "egg"

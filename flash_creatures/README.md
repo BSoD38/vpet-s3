@@ -18,9 +18,9 @@ creatures/
   egg/
     creature.json
     sprite.png
-  nibbling/
+  botamon/
     creature.json
-    sprite.png
+    sheet.png
   ...
 ```
 
@@ -28,23 +28,25 @@ creatures/
 
 ```jsonc
 {
-  "id": "sparky",            // unique string id (referenced by evolution edges)
-  "name": "Sparky",          // display name (shown on the Home screen)
+  "id": "agumon",            // unique string id (referenced by evolution edges)
+  "name": "Agumon",          // display name (shown on the Home screen)
   "tier": 3,                 // life stage, 0..7 (see table below)
 
+  "attribute": "vaccine",    // battle type: vaccine / virus / data / free
+
   "base": {                  // INNATE base stats. Effective stat = base + trained modifier.
-    "hp":  90,               //   Max HP   (cap 99999)
-    "str": 10,               //   Strength (cap 9999)
-    "end":  8,               //   Endurance / defense
-    "agi": 16,               //   Agility
-    "int":  9                //   Intellect
+    "hp": 100,               //   Max HP   (cap 99999)
+    "str": 12,               //   Strength (cap 9999)
+    "end":  9,               //   Endurance / defense
+    "agi": 10,               //   Agility
+    "int":  8                //   Intellect
   },
 
   "needs": {                 // how fast this creature's meters move (per REAL hour @ 1x speed)
     "hungerPerHr":   12,     //   hunger drain
     "happyPerHr":    13,     //   happiness drain
     "poopIntervalS": 9000,   //   seconds between poops (awake)
-    "sleepStart":    23,     //   sleep window start hour (0..23)
+    "sleepStart":    21,     //   sleep window start hour (0..23)
     "sleepEnd":       6      //   sleep window end hour   (may wrap past midnight)
   },
 
@@ -53,11 +55,12 @@ creatures/
   "voice": "beast",          // voice family for its own sounds: beast/machine/spirit/blob
   "voicePitch": 1.05,        // OPTIONAL override; omitted = derived from tier + a hash of the id
 
-  "sprite": "sprite.png",    // sprite filename in this folder
+  "sprite": "sheet.png",     // sprite filename in this folder
+  "frames": 16,              // 1 = single pose (default), 16 = 4x4 animation sheet
 
   "evolutions": [            // outgoing branches, checked TOP-DOWN; first one that qualifies wins
-    { "to": "boltor", "minAgi": 120 },   // needs Agility >= 120
-    { "to": "rollo" }                    // fallback: no requirements -> always qualifies
+    { "to": "greymon", "minStr": 120 },  // needs Strength >= 120
+    { "to": "numemon" }                  // fallback: no requirements -> always qualifies
   ]
 }
 ```
