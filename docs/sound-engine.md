@@ -130,8 +130,8 @@ actually yields data; a looping source that comes back empty is logged and ended
 ### `tone` and `melody` — synthesised
 
 This is the format that matters most for a virtual pet, and the base game uses nothing else.
-A tone is nine numbers; a melody is one line of RTTTL. The whole base sound set — 28 sounds —
-costs about 4 KB inside `base.pak`, against megabytes of WAVs for the same coverage. It also
+A tone is nine numbers; a melody is one line of RTTTL. The whole base sound set — 45 sounds —
+costs about 9 KB inside `base.pak`, against megabytes of WAVs for the same coverage. It also
 sounds *right*: square waves and short arpeggios are the idiom for this kind of device.
 
 Synth voices generate directly at the mix rate, so they need no file, no decode, no cache
@@ -406,6 +406,57 @@ typo would otherwise be pure silence with nothing anywhere to explain it.
 
 That last line is how a mod replaces the built-in chip soundtrack with a real recording: same
 id, a file instead of an `rtttl`.
+
+## Every id the game fires
+
+The complete override surface. Game code only ever plays the ids below (their C++ spellings
+live in `sfx.hpp`), so redefining one of these — a manifest entry or a loose file with the same
+id — retunes that event everywhere it happens. **Voiced** means the sound belongs to the
+creature making it (see [Creature voices](#creature-voices)): it is pitched by the creature's
+`voicePitch` and resolved as `<creature folder>/<id>` → `<species>_<id>` → `<family>_<id>`
+before falling back to the plain id, so a mod can also give any single species or family its
+own take on that row.
+
+Ids marked * exist in the bank and in `sfx.hpp` but nothing fires them yet — overriding one is
+harmless and will start working the day the event is wired up.
+
+| Id | Bus | Voiced | Plays when |
+|---|---|---|---|
+| `ui_tap` | ui | | any button press or list row |
+| `ui_back` | ui | | backing out of a screen |
+| `ui_select` | ui | | committing a choice |
+| `ui_denied` | ui | | an action is refused — care frozen, can't afford it, out of range |
+| `feed` * | sfx | | food offered |
+| `eat` | sfx | yes | each bite of an accepted meal |
+| `refuse` | sfx | yes | the pet says no — food it will not take, petting while upset |
+| `clean` | sfx | | poop cleared |
+| `heal` | sfx | | medicine given |
+| `pet_happy` | sfx | yes | a happy reaction to petting |
+| `pet_sad` | sfx | yes | an unhappy reaction — today, the pet's last sound in the death scene |
+| `pet_sick` * | sfx | yes | falling sick |
+| `sleep` | sfx | yes | lights off |
+| `wake` | sfx | yes | lights on |
+| `hatch` | sfx | yes | the egg hatches (evolution into In-Training I) |
+| `evolve` | sfx | yes | every evolution after that |
+| `levelup` * | sfx | | a battle-stat level-up |
+| `hit` | sfx | yes — the creature **hit** | a landed strike in battle |
+| `crit` | sfx | yes — the creature **hit** | a critical or super-effective strike |
+| `parry` | sfx | | the player parries |
+| `miss` | sfx | | a strike whiffs |
+| `win` | sfx | | battle won |
+| `lose` | sfx | yes | battle lost |
+| `score` * | sfx | | scoring in a minigame |
+| `countin` * | sfx | | a minigame count-in |
+| `gameover` * | sfx | | a minigame ends |
+| `bgm_home` | music | | every scene that does not name its own track (`Scene::musicId()`) |
+| `bgm_battle` | music | | battles |
+| `bgm_farewell` | music | | the death scene and the deathbed conversation — nowhere else, ever |
+
+The base bank also ships sixteen **voice-family** entries: `pet_happy`, `pet_sad`, `eat` and
+`refuse`, each under the four family prefixes `beast_`, `machine_`, `spirit_` and `blob_`
+(e.g. `beast_refuse`). They are ordinary bank entries, overridden by id like everything above —
+and a mod may add family or species entries for voiced ids the base families do not cover
+(`machine_hit`, `agumon_evolve`); resolution finds them with no other registration.
 
 ## Creature voices
 
