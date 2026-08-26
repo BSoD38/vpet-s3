@@ -35,6 +35,9 @@ extern uint32_t Flash_Size;
 void SD_Init(void);
 sdmmc_card_t *SD_GetCard(void);   // card mounted at boot, or NULL (for engine/sdwatch)
 bool SD_Probe_Insertion(void);    // card answering on the bus? (no mount/format)
+bool SD_MountFailed(void);        // card answered, but its filesystem would not mount
+esp_err_t SD_Format(void);        // erase + fresh FAT. PLAYER-INITIATED ONLY, and the
+                                  // caller MUST restart afterwards -- see SD_MMC.c.
 void Flash_Searching(void);
 FILE* Open_File(const char *file_path);
 uint16_t Folder_retrieval(const char* directory, const char* fileExtension, char File_Name[][100],uint16_t maxFiles);

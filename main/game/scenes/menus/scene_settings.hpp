@@ -3,10 +3,15 @@
 
 // Settings: four tabbed pages. GAME = care freeze. SOUND = master/music/effects volume and
 // mute. SCREEN = how long the screen stays on and how bright it is. SYSTEM = debug overlay
-// toggle, set time/date, cheats screen, update, about, factory reset. Reached from Menu ->
-// Settings. (Game speed moved to the Cheats screen: it is a testing aid, not a player option.)
+// toggle, set time/date, cheats screen, update, SD card, about, factory reset. Reached from
+// Menu -> Settings. (Game speed moved to the Cheats screen: it is a testing aid, not a
+// player option.)
 class SceneSettings : public Scene {
     int page_ = 0;   // 0 = Game, 1 = Sound, 2 = Screen, 3 = System
+    // The SD Card sub-page (status + the only format in the firmware). Shares holdT_ with
+    // the factory-reset page below: both commit on a hold, and only one can be open at a
+    // time -- each is entered from a SYSTEM row and clears holdT_ entering and leaving.
+    bool    sdPage_ = false;
     // Factory-reset confirmation: a dedicated sub-page with a HOLD-to-erase button, so a
     // stray double-tap can never wipe the save. holdT_ accumulates while the finger stays
     // on the button and resets the moment it leaves.

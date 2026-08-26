@@ -85,6 +85,38 @@ once on entry (FAT directory opens are ~10 ms each, far too slow for the refresh
 The counters are bumped where each loader accepts an entry (`gd_sd_loaded()` in
 `sim/gamedata.hpp`) — one line per accept site, nothing threaded through the registries.
 
+### If the card won't mount
+
+The card is **never formatted automatically**. `SD_Init()` mounts with
+`format_if_mount_failed = false`, so a card whose filesystem doesn't parse is reported and
+left alone: the mount fails, its packs and loose files simply don't appear, and About says
+the card isn't mounted.
+
+That flag used to be `true`, inherited from the vendor example, which made "the filesystem
+didn't parse" mean "repartition the card". A tired contact or a half-finished write on the PC
+is enough to fail a mount, and the card is the player's — it carries their packs and the
+update images. It had also become reachable unattended, since the deep-sleep poll mounts the
+card every 15 minutes with nobody holding the device. The gamedata partition already mounted
+with `false`; the card now matches it.
+
+Formatting still exists, but only where someone asks for it by name: **Settings → SYSTEM →
+SD Card**. That page reports which of three states the card is in — ready (with its size and
+how many packs came off it), present but unreadable, or absent — and offers a hold-to-confirm
+format for the first two. There is nothing to write to in the third, so the button is greyed
+out rather than hidden.
+
+| Card state | What the format does |
+|---|---|
+| mounted | `esp_vfs_fat_sdcard_format()`, reformatting in place |
+| present, wouldn't mount | `esp_vfs_fat_sdmmc_mount()` with `format_if_mount_failed` — the only path in the SDK that writes a filesystem onto a volume that won't mount, which is exactly the behaviour `SD_Init()` gave up |
+| absent | nothing; the button is disabled |
+
+Either route ends in a restart. The in-place one force-unmounts the volume
+(`f_mount(0, ...)`), invalidating the file handle each mounted pack holds, and everything the
+card contributes is boot-time state that is now wrong regardless — so the screen shuts the
+mixer down first (it streams from the card), formats, reports, and reboots, the same shape as
+a card pulled out mid-session.
+
 ### Limits
 
 * at most **4** packs mounted (`PAKFS_MAX_PAKS`); extras are logged and ignored
