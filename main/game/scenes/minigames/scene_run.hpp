@@ -31,6 +31,7 @@ class SceneRun : public Scene {
     uint8_t pendingType_ = 0;          // next obstacle type queued to spawn
     bool    rewarded_ = false;          // stat reward granted for this run (once)
     bool    tired_ = false;             // energy limited this run's stat gains (for the card)
+    uint32_t bits_ = 0;              // Bits paid for the session (shown on the card)
     int     gainAgi_ = 0, gainHp_ = 0;  // amounts granted, shown on the game-over card
 
     void  reset();

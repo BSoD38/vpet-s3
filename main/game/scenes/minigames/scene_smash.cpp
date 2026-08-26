@@ -74,7 +74,8 @@ void SceneSmash::award()
     float cost   = ENERGY_BASE + (float)score_ * ENERGY_PER;
 
     StatGain gains[] = { { STAT_STR, rawStr }, { STAT_MAXHP, rawHp } };
-    TrainingResult r = grant_training(app().pet, cost, gains, 2, 2 + score_ / 120);
+    TrainingResult r = grant_training(app().pet, app().economy, cost, gains, 2, 2 + score_ / 120);
+    bits_ = r.bits;
 
     // All-out and unrestrained. Validated as a set by tools/personality_sim.py.
     static const float DRIFT_SMASH[AX_COUNT] = { 0.80f, 0.80f, -0.30f, 1.00f };
@@ -198,7 +199,7 @@ void SceneSmash::render()
     }
 
     if (phase_ == OVER) {
-        mg_over_card("SMASHED!");
+        mg_over_card("SMASHED!", bits_);
         mg_center(MG_CARD_Y + 40, 2, col::white, "Score %d", score_);
         mg_center(MG_CARD_Y + 68, 1, tired_ ? col::warn : col::good,
                   "+%d STR  +%d HP%s", gainStr_, gainHp_, tired_ ? "  tired!" : "");

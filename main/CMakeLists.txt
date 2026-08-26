@@ -33,6 +33,8 @@ idf_component_register(
                               "./game/sim/training.cpp"
                               "./game/sim/creatures.cpp"
                               "./game/sim/foods.cpp"
+                              "./game/sim/items.cpp"
+                              "./game/sim/economy.cpp"
                               "./game/sim/personality.cpp"
                               "./game/sim/conversation.cpp"
                               "./game/sim/gamedata.cpp"
@@ -64,6 +66,7 @@ idf_component_register(
                               "./game/scenes/menus/scene_stats.cpp"
                               "./game/scenes/menus/scene_journal.cpp"
                               "./game/scenes/menus/scene_rename.cpp"
+                              "./game/scenes/menus/scene_shop.cpp"
 
                               # vendor drivers (C). Audio_Driver is a pinout header only now --
                               # its player was replaced by game/engine/audio, so there is no .c

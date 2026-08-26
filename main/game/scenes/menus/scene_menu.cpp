@@ -8,7 +8,10 @@
 // (Everyday care actions live on the Home screen; the live stat readout is on Stats.)
 // Five options now, so the spacing is tighter than the old four-item layout (which would have
 // run off the bottom) and still leaves room for the lock hint underneath.
-static const int OPT_X = 30, OPT_Y = 76, OPT_W = 180, OPT_H = 34, OPT_G = 12;
+// Six entries at the old 34+12 pitch from y=76 needed 352px of a 320px panel, so the rows
+// tightened and the block moved up when Shop was added. A seventh will not fit either: the
+// menu becomes a ListView at that point rather than shrinking the buttons again.
+static const int OPT_X = 30, OPT_Y = 62, OPT_W = 180, OPT_H = 30, OPT_G = 10;
 
 // One row per entry -- label, destination and gating travel together, so inserting an entry
 // is one line instead of renumbering magic indices in a lock predicate AND an if/else ladder
@@ -25,6 +28,7 @@ static const MenuEntry OPTS[] = {
     { "Journal",    SceneId::Journal,      false },  // memories + facts
     { "Battle",     SceneId::BattleSelect, true  },  // battle mode picker
     { "Activities", SceneId::Activities,   true  },  // minigame picker
+    { "Shop",       SceneId::Shop,         false },  // shop + bag (never gated: the player's screen)
     { "Settings",   SceneId::Settings,     false },  // game speed etc.
 };
 static const int OPT_N = (int)(sizeof(OPTS) / sizeof(OPTS[0]));

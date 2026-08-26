@@ -4,6 +4,7 @@
 #include "esp_timer.h"   // ListView measures its own frame dt for flick physics
 #include <cstring>
 #include <cstdlib>
+#include <cstdio>
 
 // Immediate-mode UI helpers. A Rect is just geometry (x,y,w,h) -- no lifecycle, no heap,
 // no scene graph. It unifies the two things every on-screen control needs: somewhere to
@@ -46,6 +47,32 @@ inline uint16_t care_tier_color(int tier) {
         case 2:  return rgb565(230, 210, 90);
         default: return col::good;
     }
+}
+
+// The Bits readout, right-aligned so it ends at `rightX`. Shared for the same reason
+// care_tier_color() and kFrozenCol are: the Shop header and the Feed picker (which can buy
+// inline) describe ONE number, and a player who learns where to find it on one screen must
+// not have to hunt for it on the other.
+//
+// Drawn as a filled pill at size 2 with the word spelled out. The first version was a bare
+// size-1 "0 B" tucked in the corner and it read as decoration -- on a 240px panel the wallet
+// has to look like a control, not a footnote.
+// The size argument lets it be a headline on the Shop (which has a row to spare) and a
+// footnote on the Feed picker (which does not) -- same pill, colours and wording either way.
+//
+// MIND THE RIGHT EDGE: at six digits this is ~148px at size 2, while kBack occupies
+// x 168..228. They cannot share a row, and the overlap would only ever have shown up on a
+// save rich enough to need the extra digits. The Shop gives it its own row for that reason.
+inline void draw_wallet(int rightX, int y, uint32_t bits, int size = 2) {
+    char buf[20];
+    snprintf(buf, sizeof buf, "%u Bits", (unsigned)bits);
+    const int cw = size * 6, ch = size * 8;
+    const int w = (int)strlen(buf) * cw + 16, h = ch + 8;
+    const int x = rightX - w;
+    const uint16_t fg = bits ? col::good : col::dim;
+    fb.fillRoundRect(x, y, w, h, h / 2, rgb565(40, 44, 58));
+    fb.drawRoundRect(x, y, w, h, h / 2, fg);
+    gfx_text(x + 8, y + (h - ch) / 2, size, fg, "%s", buf);
 }
 
 // The standard top-right "Back" button, identical across the menu scenes.

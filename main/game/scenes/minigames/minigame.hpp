@@ -10,7 +10,10 @@
 // own text. Same spirit as widgets.hpp / tabs.hpp: stateless, rebuilt each frame.
 
 // Standardized game-over card geometry (centered panel with a warn border).
-static constexpr int MG_CARD_X = 28, MG_CARD_Y = 108, MG_CARD_W = GAME_W - 56, MG_CARD_H = 100;
+// Grew from 100 to 122 when Bits earned joined the card: the payout is the one result line
+// that is about the PLAYER rather than the creature, and burying it under the fold would
+// have made the economy invisible at exactly the moment it pays out.
+static constexpr int MG_CARD_X = 28, MG_CARD_Y = 108, MG_CARD_W = GAME_W - 56, MG_CARD_H = 122;
 
 // READY-screen stamina line: "Energy N/100" (turns warn + "(tired!)" below 25).
 inline void mg_energy_readout(int x, int y, int energy) {
@@ -28,11 +31,17 @@ inline void mg_center(int y, int size, uint16_t c, const char* fmt, ...) {
     gfx_text(MG_CARD_X + (MG_CARD_W - tw) / 2, y, size, c, "%s", buf);
 }
 
-// Draw the game-over card: panel + warn border + centered title + the "Tap to exit" footer.
-// Callers then add their score/gains lines with mg_center() at MG_CARD_Y + 40 / + 68.
-inline void mg_over_card(const char* title) {
+// Draw the game-over card: panel + warn border + centered title, the Bits payout, and the
+// "Tap to exit" footer. Callers then add their score/gains lines with mg_center() at
+// MG_CARD_Y + 40 / + 68.
+//
+// The Bits line lives HERE rather than in each game for the same reason grant_training pays
+// the wallet rather than each game doing it: five copies of one line is five chances for the
+// games to disagree about how a payout is phrased.
+inline void mg_over_card(const char* title, uint32_t bits = 0) {
     fb.fillRoundRect(MG_CARD_X, MG_CARD_Y, MG_CARD_W, MG_CARD_H, 8, col::panel);
     fb.drawRoundRect(MG_CARD_X, MG_CARD_Y, MG_CARD_W, MG_CARD_H, 8, col::warn);
     mg_center(MG_CARD_Y + 14, 2, col::warn, "%s", title);
-    mg_center(MG_CARD_Y + 84, 1, col::dim,  "Tap to exit");
+    mg_center(MG_CARD_Y + 92, 1, bits ? col::good : col::dim, "+%u Bits", (unsigned)bits);
+    mg_center(MG_CARD_Y + 106, 1, col::dim,  "Tap to exit");
 }

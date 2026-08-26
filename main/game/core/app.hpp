@@ -4,6 +4,8 @@
 #include "sim/save.hpp"
 #include "sim/creatures.hpp"
 #include "sim/foods.hpp"
+#include "sim/items.hpp"
+#include "sim/economy.hpp"
 #include "sim/personality.hpp"
 #include "sim/conversation.hpp"
 #include "sim/pet.hpp"
@@ -29,6 +31,7 @@
 #include "scenes/menus/scene_stats.hpp"
 #include "scenes/menus/scene_journal.hpp"
 #include "scenes/menus/scene_rename.hpp"
+#include "scenes/menus/scene_shop.hpp"
 
 // SceneId and Slide live in core/scene.hpp (scene headers need them; this header includes
 // those before it could define anything).
@@ -41,6 +44,8 @@ public:
     InputManager     input;
     CreatureRegistry creatures;          // data-driven roster (flash + SD), loaded in init()
     FoodRegistry     foods;              // data-driven food list (gamedata + SD), loaded in init()
+    ItemRegistry     items;              // data-driven item list (toys/decor/medicine), loaded in init()
+    Economy          economy;            // Bits + the bag; own NVS keys, survives death
     PersonalityRegistry personalities;   // data-driven natures + traits (gamedata + SD)
     PersonalityTracker  drift{save, personalities};   // emergent identity; fed by Pet's actions
     ConversationSystem  conversations;    // moddable dialogue: streaming selection, O(1) RAM
@@ -69,6 +74,7 @@ public:
     SceneStats    stats;
     SceneJournal  journal;
     SceneRename   rename;
+    SceneShop     shop;                  // Shop + Bag tabs; never gated (it is the player's screen)
 
     void init();               // bind scenes, boot pet, load flags, enter Home
     void runLoop();            // the forever render/sim loop (never returns)

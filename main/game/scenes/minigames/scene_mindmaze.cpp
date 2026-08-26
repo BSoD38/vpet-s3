@@ -76,7 +76,8 @@ void SceneMindMaze::award()
     float cost   = ENERGY_BASE + (float)completed_ * ENERGY_PER_RND;
 
     StatGain gains[] = { { STAT_INT, rawInt } };
-    TrainingResult r = grant_training(app().pet, cost, gains, 1, 2 + completed_ / 4);
+    TrainingResult r = grant_training(app().pet, app().economy, cost, gains, 1, 2 + completed_ / 4);
+    bits_ = r.bits;
 
     // Quiet, cerebral, self-directed -- and the main NON-neglectful route to a timid,
     // independent temperament. Validated as a set by tools/personality_sim.py.
@@ -195,7 +196,7 @@ void SceneMindMaze::render()
     }
 
     if (phase_ == OVER) {
-        mg_over_card("MEMORY!");
+        mg_over_card("MEMORY!", bits_);
         mg_center(MG_CARD_Y + 40, 2, col::white, "Rounds %d", completed_);
         mg_center(MG_CARD_Y + 68, 1, tired_ ? col::warn : col::good,
                   "+%d INT%s", gainInt_, tired_ ? "  tired!" : "");

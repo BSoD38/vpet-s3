@@ -220,6 +220,7 @@ void App::setScene(SceneId id, Slide slide)
         case SceneId::Journal:  scenes.set(&journal);  break;
         case SceneId::Rename:   scenes.set(&rename);   break;
         case SceneId::About:    scenes.set(&about);    break;
+        case SceneId::Shop:     scenes.set(&shop);     break;
     }
 
     // Music follows the scene, decided here for the same reason the navigation sounds are:
@@ -246,6 +247,7 @@ void App::init()
     battle.bind(*this); battleSelect.bind(*this);
     settings.bind(*this); updateScene.bind(*this); cheats.bind(*this); timeset.bind(*this);
     stats.bind(*this); journal.bind(*this); rename.bind(*this); about.bind(*this);
+    shop.bind(*this);
 
     // Process-wide, and must precede every parse below: keeps JSON trees out of internal heap.
     gamedata_json_use_psram();
@@ -278,6 +280,8 @@ void App::init()
 
     creatures.loadAll();              // load the creature roster before the pet resolves its id
     foods.loadAll();                  // food list (independent of the pet; needed by the Feed picker)
+    items.loadAll();                  // toys/decor/medicine; empty in the base game until E2
+    economy.init(save);               // wallet + bag (own NVS keys, so a pet reset never empties it)
     personalities.loadAll();          // natures + traits, before any drift is evaluated
     drift.boot();
     conversations.init(save);         // mounts gamedata + loads facts/seen history

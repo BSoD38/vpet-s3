@@ -1,6 +1,6 @@
 # Evolution Pacing
 
-Status: **re-paced** (tier 4 and tier 5 timers stretched). Mega+ designed, content pending.
+Status: **re-paced** — In-Training shortened, tier 4 and 5 stretched. Mega+ designed, content pending.
 
 Evolution is the most visible progression the game has — the creature literally becomes
 something else. This doc is about *when* that happens, because until now it happened almost
@@ -45,8 +45,11 @@ become "have you engaged with battle at all" checks.
 
 ## 3. Design rules
 
-1. **The opening stays fast.** A newcomer must get a real, recognisable creature on day one or
-   two. Tiers 0–3 are untouched; all the stretching happens after the player is invested.
+1. **The opening stays fast — genuinely fast.** A newcomer must get a real, recognisable
+   creature within an evening, not a day. The In-Training stages were originally 1 h + 12 h,
+   which put the first proper form 13 hours out: a player who started after breakfast had a
+   featureless blob until bedtime. They are now 30 min + 90 min, so **Child arrives about two
+   hours in**. Child upward is where the stretching happens, once the player is invested.
 2. **Timers pace, gates qualify.** The stage timer decides *when*; the stat/bond/win gates decide
    *which branch*. If a gate binds harder than the timer, pacing has quietly moved to whichever
    activity feeds that gate.
@@ -61,9 +64,9 @@ become "have you engaged with battle at all" checks.
 | Stage | Was | Now | Cumulative |
 | --- | --- | --- | --- |
 | Egg | 120 | *unchanged* | 2 min |
-| In-Training I | 3,600 | *unchanged* | 1 h |
-| In-Training II | 43,200 | *unchanged* | 13 h |
-| Child | 172,800 | *unchanged* | 2.5 d |
+| In-Training I | 3,600 (1 h) | **1,800 (30 min)** | ~32 min |
+| In-Training II | 43,200 (12 h) | **5,400 (90 min)** | **~2 h → Child** |
+| Child | 172,800 | *unchanged* | ~2 d |
 | Champion | 259,200 (3 d) | **1,209,600 (2 weeks)** | ~2.5 wk |
 | Ultimate | 345,600 (4 d) | **3,628,800 (6 weeks)** | **~2 months → Mega** |
 
@@ -71,7 +74,7 @@ Two months to Mega is roughly **20% of an average life**. The win gates now work
 15 wins over two weeks and 40 over six — comfortably under one a day, so they qualify rather
 than grind.
 
-Applied to 14 creature files across [`flash_creatures/`](../flash_creatures/) and
+Applied to the In-Training pair and to every tier-4/5 creature across [`flash_creatures/`](../flash_creatures/) and
 [`sdcard_mod/creatures/`](../sdcard_mod/creatures/), plus both roster tables in
 [`tools/rosters/`](../tools/rosters/) which are the source of truth. Terminal creatures
 (`minStageSecs: 1000000000`) are untouched by definition.

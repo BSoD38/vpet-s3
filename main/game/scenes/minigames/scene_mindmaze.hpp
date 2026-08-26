@@ -27,6 +27,7 @@ class SceneMindMaze : public Scene {
 
     bool    rewarded_ = false;
     bool    tired_ = false;
+    uint32_t bits_ = 0;              // Bits paid for the session (shown on the card)
     int     gainInt_ = 0;
 
     void reset();

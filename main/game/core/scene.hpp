@@ -9,7 +9,7 @@ class App;   // scenes reach the game context (pet, gfx, scene switching) throug
 // return target) -- app.hpp includes every scene header before it could define these.
 enum class SceneId { Home, Feed, Conversation, Death, Menu, Activities, Run, MindMaze, Smash,
                      Bulwark, Stance, Battle, BattleSelect, Settings, Update, Cheats, TimeSet,
-                     Stats, Journal, Rename, About };
+                     Stats, Journal, Rename, About, Shop };
 
 // Scene-change animation. Forward = going deeper (new covers, slides in from the
 // right with overshoot); Back = returning (old slides off, revealing new);

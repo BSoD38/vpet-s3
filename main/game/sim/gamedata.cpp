@@ -3,6 +3,7 @@
 #include "esp_log.h"
 #include "esp_heap_caps.h"
 #include "cJSON.h"
+#include "engine/gfx.hpp"      // rgb565, for gd_color
 #include <cstdlib>
 #include <cstdio>
 #include <cstring>
@@ -77,6 +78,18 @@ bool gd_bool(cJSON* o, const char* k, bool def)
     return def;
 }
 
+uint16_t gd_color(cJSON* o, const char* k, uint16_t def)
+{
+    char s[12];
+    gd_str(o, k, s, sizeof s, "");
+    const char* p = (s[0] == '#') ? s + 1 : s;
+    if (strlen(p) != 6) return def;
+    char* end = nullptr;
+    long v = strtol(p, &end, 16);
+    if (end != p + 6) return def;
+    return rgb565((uint8_t)((v >> 16) & 0xFF), (uint8_t)((v >> 8) & 0xFF), (uint8_t)(v & 0xFF));
+}
+
 bool gamedata_mount()
 {
     static bool tried = false;
@@ -117,6 +130,7 @@ const char* gd_sd_name(GdSystem s)
     switch (s) {
         case GD_CREATURES: return "Creatures";
         case GD_FOODS:     return "Foods";
+        case GD_ITEMS:     return "Items";
         case GD_NATURES:   return "Natures";
         case GD_TRAITS:    return "Traits";
         case GD_SOUNDS:    return "Sounds";

@@ -106,6 +106,7 @@ void SceneBattle::onEnter()
     judgeText_ = nullptr; judgeT_ = 0.0f;
     tapped_ = false;
     done_ = false; resultT_ = 0.0f;
+    bitsWon_ = 0;
     shake_ = shakeX_ = shakeY_ = 0.0f;
     shock_ = 0.0f;
     for (int i = 0; i < 2; i++) { lunge_[i] = flash_[i] = faint_[i] = 0.0f; }
@@ -361,6 +362,14 @@ void SceneBattle::update(float dt)
         // is the payoff, and waiting out a fade would put the sting in the wrong place.
         sfx::play(won ? sfx::kWin : sfx::kLose);
         outcome_ = app().pet.applyBattleResult(won, hpFrac);
+        // Bits are credited HERE rather than inside applyBattleResult, because the wallet is
+        // the player's and not the pet's (docs/economy-and-inventory.md 1, rule 6) -- Pet has
+        // no business owning it. Wins only: losing already costs bond, happiness and HP.
+        if (won) {
+            bitsWon_ = econ::kBattleWin;
+            app().economy.earn(bitsWon_);
+            app().economy.flush();
+        }
         if (mode_ == BattleMode::Tower) {   // advance on win, drop to last checkpoint on loss
             int next = won ? towerFloor_ + 1 : ((towerFloor_ - 1) / 5) * 5 + 1;
             if (next < 1) next = 1;

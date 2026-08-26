@@ -3,6 +3,8 @@
 #include "engine/gfx.hpp"
 #include "ui/widgets.hpp"
 #include "sim/foods.hpp"
+#include "sim/economy.hpp"
+#include "engine/audio/sfx.hpp"
 
 // layout
 static const int ROW_H  = 46;
@@ -24,6 +26,9 @@ void SceneFeed::render()
 
     fb.fillScreen(col::panel);
     gfx_text(PAD_X, 18, 3, col::accent, "FEED");
+    // Rows can buy (see onInput), so the wallet belongs on this screen too -- being told the
+    // price of something without being told what you have is the wrong half of the story.
+    draw_wallet(GAME_W - PAD_X, 42, app().economy.bits(), 1);
 
     // Coarse hunger state, so you know whether a snack or a full meal is called for
     // without being handed a number to optimise.
@@ -48,9 +53,35 @@ void SceneFeed::render()
         // Name/desc come from data files (mods included), so their length is unknown at
         // layout time -- fit them to the space left inside the card instead of letting
         // them run past its edge.
+        // Stock, per docs/economy-and-inventory.md 3. A FREE food (cost 0 -- kibble, and any
+        // mod food that copies it) is unlimited and shows no count at all: the rule is data,
+        // not a special case for one id, so the row simply has nothing to say.
+        int rightW = 0;
+        if (f.cost > 0) {
+            const int held = app().economy.count(f.id);
+            char tagbuf[16];
+            uint16_t tagcol;
+            if (held > 0) {
+                snprintf(tagbuf, sizeof tagbuf, "x%d", held);
+                tagcol = col::white;
+            } else if (app().economy.canAfford(f.cost)) {
+                // Out of stock but affordable: the row becomes a buy button, so running dry
+                // never means a trip to the shop mid-feed.
+                snprintf(tagbuf, sizeof tagbuf, "BUY %u", (unsigned)f.cost);
+                tagcol = col::accent;
+            } else {
+                snprintf(tagbuf, sizeof tagbuf, "%u", (unsigned)f.cost);
+                tagcol = col::dim;
+            }
+            rightW = (int)strlen(tagbuf) * 6 + 8;
+            gfx_text(card.x + card.w - rightW, cy - 4, 1, tagcol, "%s", tagbuf);
+        }
+
+        const bool out = (f.cost > 0 && app().economy.count(f.id) == 0);
+
         int tx = PAD_X + 8 + SWATCH_R * 2 + 10;
-        int textW = (card.x + card.w) - tx - 6;
-        gfx_text_fit(tx, row.y + 6,  textW, 2, col::white, "%s", f.name);
+        int textW = (card.x + card.w) - tx - rightW - 6;
+        gfx_text_fit(tx, row.y + 6,  textW, 2, out ? col::dim : col::white, "%s", f.name);
         gfx_text_fit(tx, row.y + 25, textW, 1, col::dim,   "%s", f.desc);
     }
     list_.endClip();
@@ -71,8 +102,28 @@ void SceneFeed::onInput(const Input& in)
     list_.update(in, n);
 
     int row = list_.tapped();
-    if (row >= 0 && row < n) {
-        app().pet.feed(app().foods.at(row));
-        app().setScene(SceneId::Home, Slide::Back);   // feed and return, one gesture
+    if (row < 0 || row >= n) return;
+
+    const Food& f = app().foods.at(row);
+
+    // Out of stock: the tap BUYS one and stays put, so the next tap feeds it. Deliberately
+    // two gestures -- spending the player's Bits as a side effect of reaching for the food
+    // they always tap is exactly the kind of surprise a shop should never spring.
+    if (f.cost > 0 && app().economy.count(f.id) == 0) {
+        if (app().economy.buy(f.id, ITEM_FOOD, f.cost)) {
+            app().economy.flush();
+            sfx::play(sfx::kSelect);
+        } else {
+            sfx::play(sfx::kDenied);
+        }
+        return;
     }
+
+    // Ask BEFORE consuming: an egg, a sleeping or a sick creature refuses the meal, and a
+    // refused meal must not eat the stock. canEat() arms the "no" wiggle itself.
+    if (!app().pet.canEat()) { app().pet.playRefusal(); return; }
+
+    if (f.cost > 0) { app().economy.take(f.id, 1); app().economy.flush(); }
+    app().pet.feed(f);
+    app().setScene(SceneId::Home, Slide::Back);   // feed and return, one gesture
 }

@@ -251,7 +251,9 @@ void SceneBattle::drawJudge()
 void SceneBattle::drawResult()
 {
     if (!done_) return;
-    int bw = 212, bh = 132, bx = (GAME_W - bw) / 2, by = (GAME_H - bh) / 2;
+    // 148 rather than 132: the Bits line pushed the tower and aftermath lines down, and the
+    // banner has to fit its worst case -- a Tower win that also caught a cold.
+    int bw = 212, bh = 148, bx = (GAME_W - bw) / 2, by = (GAME_H - bh) / 2;
     fb.fillRoundRect(bx, by, bw, bh, 12, rgb565(18, 14, 30));
     bool win = outcome_.won;
     uint16_t c = win ? col::good : col::warn;
@@ -271,22 +273,29 @@ void SceneBattle::drawResult()
     snprintf(hl, sizeof hl, "HP now %d%%", outcome_.healthPct);
     gfx_text((GAME_W - (int)strlen(hl) * 6) / 2, by + 62, 1, col::dim, "%s", hl);
 
+    // What the win paid. Drawn on a loss too, as a dim zero: silence there would read as the
+    // game having forgotten to pay rather than as defeat earning nothing.
+    char bl[24];
+    snprintf(bl, sizeof bl, "+%u Bits", (unsigned)bitsWon_);
+    gfx_text((GAME_W - (int)strlen(bl) * 6) / 2, by + 76, 1,
+             bitsWon_ ? col::good : col::dim, "%s", bl);
+
     if (mode_ == BattleMode::Tower) {
         char tl[28];
         if (win) snprintf(tl, sizeof tl, "Floor %d cleared!", towerFloor_);
         else     snprintf(tl, sizeof tl, "fell to floor %d", ((towerFloor_ - 1) / 5) * 5 + 1);
-        gfx_text((GAME_W - (int)strlen(tl) * 6) / 2, by + 78, 1, win ? col::good : col::warn, "%s", tl);
+        gfx_text((GAME_W - (int)strlen(tl) * 6) / 2, by + 92, 1, win ? col::good : col::warn, "%s", tl);
     }
 
     if (outcome_.gotSick || outcome_.gotInjured) {
         // A rough win costs a cold; a rough loss wounds (and a wound festers if ignored).
         const char* s = outcome_.gotInjured ? "got injured!" : "caught a cold!";
-        gfx_text((GAME_W - (int)strlen(s) * 6) / 2, by + 92, 1, col::warn, "%s", s);
+        gfx_text((GAME_W - (int)strlen(s) * 6) / 2, by + 106, 1, col::warn, "%s", s);
     }
 
     if (resultT_ > 0.5f) {
         const char* s = "tap to exit";
-        gfx_text((GAME_W - (int)strlen(s) * 12) / 2, by + 110, 2, col::dim, "%s", s);
+        gfx_text((GAME_W - (int)strlen(s) * 12) / 2, by + 126, 2, col::dim, "%s", s);
     }
 }
 

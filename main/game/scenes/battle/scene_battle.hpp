@@ -84,6 +84,10 @@ private:
     bool    done_ = false;
     float   resultT_ = 0.0f;
     BattleOutcome outcome_ {};          // stakes/rewards applied at battle end (for the banner)
+    // Bits paid for the win. NOT part of BattleOutcome: that struct is Pet's, and the wallet
+    // is the player's rather than the creature's, so Pet never touches it (economy rule 6).
+    // The scene awards the Bits, so the scene is what remembers them for the banner.
+    uint32_t      bitsWon_ = 0;
 
     // mode config
     BattleMode mode_ = BattleMode::Quick;

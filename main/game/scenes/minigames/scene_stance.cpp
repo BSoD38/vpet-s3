@@ -89,7 +89,8 @@ void SceneStance::award()
     float cost   = ENERGY_BASE + survived_ * ENERGY_PER;
 
     StatGain gains[] = { { STAT_END, rawEnd }, { STAT_MAXHP, rawHp } };
-    TrainingResult r = grant_training(app().pet, cost, gains, 2, 2 + (int)survived_ / 8);
+    TrainingResult r = grant_training(app().pet, app().economy, cost, gains, 2, 2 + (int)survived_ / 8);
+    bits_ = r.bits;
 
     // Stillness and control. Validated as a set by tools/personality_sim.py.
     static const float DRIFT_STANCE[AX_COUNT] = { 0.00f, -1.00f, -0.30f, -0.60f };
@@ -213,7 +214,7 @@ void SceneStance::render()
                  ax_, ay_, az_, rollAxis_, tiltInput_);
 
     if (phase_ == OVER) {
-        mg_over_card("FELL!");
+        mg_over_card("FELL!", bits_);
         mg_center(MG_CARD_Y + 40, 2, col::white, "Time %.1fs", survived_);
         mg_center(MG_CARD_Y + 68, 1, tired_ ? col::warn : col::good,
                   "+%d END  +%d HP%s", gainEnd_, gainHp_, tired_ ? "  tired!" : "");

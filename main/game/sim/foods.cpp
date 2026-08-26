@@ -19,21 +19,6 @@ static const char* SD_ROOT = "/sdcard/foods";
 // parser is the personality system's parse_drift, so axis names/order have one owner.
 static const long MAX_FILE_BYTES = 16384;   // food configs are tiny
 
-// "#RRGGBB" (or "RRGGBB") -> rgb565. Anything else -- including LONGER hex strings, which
-// strtol would otherwise misparse into the wrong channels (or clamp to LONG_MAX, a
-// near-white swatch) -- falls back to a neutral grey.
-static uint16_t parse_color(cJSON* o)
-{
-    char s[12];
-    gd_str(o, "color", s, sizeof s, "");
-    const char* p = (s[0] == '#') ? s + 1 : s;
-    if (strlen(p) != 6) return col::dim;
-    char* end = nullptr;
-    long v = strtol(p, &end, 16);
-    if (end != p + 6) return col::dim;
-    return rgb565((uint8_t)((v >> 16) & 0xFF), (uint8_t)((v >> 8) & 0xFF), (uint8_t)(v & 0xFF));
-}
-
 // --- registry ------------------------------------------------------------------
 
 int FoodRegistry::indexOf(const char* id) const
@@ -70,7 +55,7 @@ void FoodRegistry::parseEntry(cJSON* root, Food& f)
     f.fills     = (int16_t)gd_num(root, "fills",     0);
     f.happiness = (int16_t)gd_num(root, "happiness", 0);
     f.health    = (int16_t)gd_num(root, "health",    0);
-    f.color     = parse_color(root);
+    f.color     = gd_color(root, "color", col::dim);
     f.cost      = (uint16_t)gd_num(root, "cost", 0);     // reserved (economy)
     gd_str(root, "rarity", f.rarity, sizeof f.rarity, "common");
 

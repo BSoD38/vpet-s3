@@ -16,7 +16,7 @@
     "sleepStart": 21,
     "sleepEnd": 7
   },
-  "minStageSecs": 43200,
+  "minStageSecs": 5400,
   "sprite": "sheet.png",
   "frames": 16,
   "evolutions": [

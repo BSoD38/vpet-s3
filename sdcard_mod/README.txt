@@ -78,7 +78,7 @@ WHAT TO LOOK FOR
 ----------------
 Serial log at boot:
     CREA: sd: 'punimon' (Punimon) tier 1        <- nine of these, source tagged "sd"
-    CREA: registry ready: 32 creatures          <- 23 flash + 9 SD
+    CREA: registry ready: 26 creatures          <- 17 flash + 9 SD
     FOOD: sd: 'treat' (Deluxe Treat) fills 16   <- the override
     FOOD: registry ready: 7 foods               <- 6 base + honey_drop (treat was replaced)
     CONV: scan: 5 files ...                     <- 4 flash + the SD pack

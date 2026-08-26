@@ -17,7 +17,7 @@
       "tier": 1, "attribute": "free",
       "base": { "hp": 25, "str": 3, "end": 4, "agi": 3, "int": 3 },
       "needs": { "hungerPerHr": 8, "happyPerHr": 10, "poopIntervalS": 7200, "sleepStart": 20, "sleepEnd": 7 },
-      "minStageSecs": 3600,
+      "minStageSecs": 1800,
       "evolutions": [ { "to": "tsunomon" } ]
     },
     {
@@ -25,7 +25,7 @@
       "tier": 2, "attribute": "free",
       "base": { "hp": 45, "str": 5, "end": 6, "agi": 5, "int": 5 },
       "needs": { "hungerPerHr": 10, "happyPerHr": 12, "poopIntervalS": 9000, "sleepStart": 21, "sleepEnd": 7 },
-      "minStageSecs": 43200,
+      "minStageSecs": 5400,
       "evolutions": [
         { "to": "gabumon", "maxCareMistakes": 3 },
         { "to": "elecmon" }

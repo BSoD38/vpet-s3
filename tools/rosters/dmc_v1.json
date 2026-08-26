@@ -3,10 +3,10 @@
     "DMC V1 (Digital Monster Color Ver.1) official roster, evolution tree per Wikimon.",
     "Original requirements -> game fields: 'calls' (care mistakes) -> maxCareMistakes;",
     "training counts -> minStr/minAgi thresholds on the TRAINED stat (mod resets on evolve,",
-    "same scale as sparky->boltor minAgi 120); '15+ battles, 80%+ wins' -> minWins 15.",
+    "same scale as the Agumon->Greymon minStr 120 gate); '15+ battles, 80%+ wins' -> minWins 15.",
     "Sleep-disturbance / overfeed branches (Airdramon/Seadramon split) are approximated",
     "with stat gates. Edges are checked TOP-DOWN, first qualifying wins; last is fallback.",
-    "Stats/needs are tuning knobs scaled against the placeholder tiers (sparky/boltor)."
+    "Stats/needs are tuning knobs; the tier table in flash_creatures/README.md is the scale."
   ],
   "spriteRoot": "D:/T\u00e9l\u00e9chargements/drive-download-20260805T192802Z-1-001/DMC Rosters (PLEASE SEE READ ME)/DMC V1 (Official) Roster/Individual Sprites",
   "creatures": [
@@ -15,7 +15,7 @@
       "tier": 1, "attribute": "free",
       "base": { "hp": 25, "str": 3, "end": 3, "agi": 4, "int": 3 },
       "needs": { "hungerPerHr": 8, "happyPerHr": 10, "poopIntervalS": 7200, "sleepStart": 20, "sleepEnd": 7 },
-      "minStageSecs": 3600,
+      "minStageSecs": 1800,
       "evolutions": [ { "to": "koromon" } ]
     },
     {
@@ -23,7 +23,7 @@
       "tier": 2, "attribute": "free",
       "base": { "hp": 45, "str": 5, "end": 5, "agi": 6, "int": 5 },
       "needs": { "hungerPerHr": 10, "happyPerHr": 12, "poopIntervalS": 9000, "sleepStart": 21, "sleepEnd": 7 },
-      "minStageSecs": 43200,
+      "minStageSecs": 5400,
       "evolutions": [
         { "to": "agumon", "maxCareMistakes": 3 },
         { "to": "betamon" }

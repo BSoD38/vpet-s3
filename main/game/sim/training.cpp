@@ -2,7 +2,7 @@
 
 // Mirrors the original SceneRun::award() gate exactly, just generalized to an arbitrary
 // stat table so every minigame shares one code path.
-TrainingResult grant_training(Pet& pet, float energyCost,
+TrainingResult grant_training(Pet& pet, Economy& econ, float energyCost,
                               const StatGain* gains, int n, int friendshipBonus)
 {
     TrainingResult r{};
@@ -33,6 +33,16 @@ TrainingResult grant_training(Pet& pet, float energyCost,
         r.friendship = friendshipBonus;
     }
 
+    // Pay for the session. A frozen pet returned above, so a paused creature cannot be
+    // farmed for Bits any more than it can be farmed for stats.
+    if (cost > 0.0f) {
+        r.bits = (uint32_t)(econ::kTrainingSession * (r.energySpent / cost));
+    } else {
+        r.bits = econ::kTrainingSession;         // a game with no energy cost still pays
+    }
+    econ.earn(r.bits);
+
     pet.markSaved();                             // persist the session's gains
+    econ.flush();                                // ...and the Bits, in the same breath
     return r;
 }

@@ -105,7 +105,8 @@ void SceneRun::award()
     float cost = ENERGY_RUN_BASE + (float)score_ * ENERGY_RUN_PER_PT;
 
     StatGain gains[] = { { STAT_AGI, rawAgi }, { STAT_MAXHP, rawHp } };
-    TrainingResult r = grant_training(app().pet, cost, gains, 2, 2 + score_ / 8);
+    TrainingResult r = grant_training(app().pet, app().economy, cost, gains, 2, 2 + score_ / 8);
+    bits_ = r.bits;
 
     // Which games you pick shapes temperament, not just stats: running is energetic and
     // fairly disciplined. Validated as a set by tools/personality_sim.py.
@@ -298,7 +299,7 @@ void SceneRun::render()
         mg_energy_readout(24, 186, (int)app().pet.energy());
         gfx_text(48, 210, 2, col::good, "TAP TO START");
     } else if (phase_ == OVER) {
-        mg_over_card("GAME OVER");
+        mg_over_card("GAME OVER", bits_);
         mg_center(MG_CARD_Y + 40, 2, col::white, "Score %d", score_);
         mg_center(MG_CARD_Y + 68, 1, tired_ ? col::warn : col::good,
                   "+%d AGI  +%d HP%s", gainAgi_, gainHp_, tired_ ? "  tired!" : "");

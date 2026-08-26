@@ -57,6 +57,7 @@ enum RowKind : uint8_t {
     ROW_MAXZERO,   // MAX STATS | ZERO STATS
     ROW_SPECIES,   // current species; opens the picker
     ROW_EVO,       // force the earned evolution
+    ROW_BITS,      // wallet, [-]/[+] in steps of 500 (there is no other way to test the Shop)
 };
 struct CheatRow { RowKind kind; int8_t arg; const char* label; };
 static const CheatRow ROWS[] = {
@@ -79,6 +80,8 @@ static const CheatRow ROWS[] = {
     { ROW_HEADER,  0, "SPECIES" },
     { ROW_SPECIES, 0, nullptr },
     { ROW_EVO,     0, nullptr },
+    { ROW_HEADER,  0, "ECONOMY" },
+    { ROW_BITS,    0, nullptr },
 };
 static const int ROW_N = (int)(sizeof(ROWS) / sizeof(ROWS[0]));
 
@@ -209,6 +212,12 @@ void SceneCheats::render()
                 row_right(r).button(m ? m : "OK", m ? rgb565(140, 80, 70) : kBtnBg, col::white, 1);
                 break;
             }
+            case ROW_BITS:
+                gfx_text(14, r.y + (ROW_H - 8) / 2, 1, col::white, "Bits");
+                gfx_text_fit(46, r.y + (ROW_H - 8) / 2, MINUS_X0 - 50, 1, col::good,
+                             "%u", (unsigned)app().economy.bits());
+                draw_steppers(r);
+                break;
             case ROW_FRIEND:
                 gfx_text(14, r.y + (ROW_H - 8) / 2, 1, col::white, "Bond");
                 // Number AND tier: the tier is what the death system's gates actually read
@@ -387,6 +396,19 @@ void SceneCheats::onInput(const Input& in)
                 default:            pet.cheatSetCondition(COND_HEALTHY);  break;
             }
             break;
+        case ROW_BITS: {
+            // Bits are otherwise earned only by playing, so without this the Shop cannot be
+            // exercised at all on a fresh save -- and a spend-side bug would be invisible.
+            int dir = stepper_dir(in.x);
+            if (dir == 0) { fb = nullptr; break; }      // tapped the label, not a stepper
+            Economy& e = app().economy;
+            uint32_t before = e.bits();
+            if (dir > 0) e.earn(500);
+            else         e.spend(e.bits() < 500 ? e.bits() : 500);
+            if (e.bits() == before) fb = sfx::kDenied;  // pinned at 0 / the cap
+            else                    e.flush();
+            break;
+        }
         case ROW_FRIEND: {
             int dir = stepper_dir(in.x);
             if (dir == 0) { fb = nullptr; break; }      // tapped the label, not a stepper

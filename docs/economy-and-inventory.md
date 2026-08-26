@@ -198,6 +198,63 @@ mod file has to change, and foods keep their own schema and folder.
 **No selling.** Bits flow one way. Buy/sell arbitrage and bag tidy-up are both chores nobody asked
 for.
 
+## 5.1 The modding ceiling — deferred to E6
+
+**As built, an item mod can only add more of what the engine already understands.** `kind` is a
+closed enum, and each value's behaviour is compiled in: a `toy` nudges drift and happiness, a
+`care` item cures one `Condition`, `decor` fills a slot. So a mod can ship a hundred new toys and
+not one new *idea*. It cannot:
+
+- add a kind the engine has never heard of, with behaviour to match;
+- give one item **more than one** effect (a snack that also cures, a toy that pays Bits);
+- touch anything outside its bucket — stats, energy, vitality, bond, the wish;
+- gate an item on anything ("only on a sick pet", "only at night", "only past Champion");
+- express uses, cooldowns, or durability.
+
+That is a poor deal for a game whose creatures, foods, conversations, natures, sounds and packs
+are all fully data-driven. Items are currently the one system where the data is a lookup table
+rather than a description of behaviour.
+
+### The shape of the fix
+
+**Borrow the conversation system's, rather than inventing a second one.** It already solved
+exactly this problem — moddable, gated, data-driven behaviour with a lint tool
+([`conv_lint.py`](../tools/conv_lint.py)) that validates against the firmware's own constants. An
+item should read the same way a conversation choice does:
+
+```json
+{
+  "id": "night_tonic", "name": "Night Tonic", "group": "tonics",
+  "cost": 90, "uses": 3,
+  "when":    { "condition": "sick", "hourAfter": 20 },
+  "effects": [ { "cure": "sick" }, { "happiness": 4 }, { "drift": { "energetic": -0.4 } } ]
+}
+```
+
+Three changes carry most of the value:
+
+1. **`effects` as a list**, replacing the single-purpose `treats` / `happiness` / `drift` fields.
+   Items become composable instead of single-purpose. The op vocabulary is the engine's existing
+   verbs — `cure`, `hunger`, `happiness`, `health`, `energy`, `bond`, `drift`, `bits`, `stat`,
+   `setWish`, `forgiveMistake`, `evolve` — each already a method on `Pet` or `Economy`.
+2. **`when` gates on use**, reusing the `ConvContext` shape so one gate vocabulary covers
+   conversations and items both.
+3. **`kind` becomes presentation only** — a free-text `group` with a display label, so a mod can
+   add a "TONICS" heading to the Shop without an enum change. Sorting falls back to declaration
+   order for unknown groups.
+
+### Why it is E6 and not now
+
+An effect interpreter is a real piece of work: a parser, a bounded op table, a use-time gate
+evaluator, and a lint tool, plus the migration of the five built-in kinds onto it. Doing it before
+the kinds actually *exist* would be designing an abstraction over one example — medicine (E2),
+toys (E3) and decor (E5) are the three cases that will show what the vocabulary needs to cover.
+E6 is the first point where all of them are real.
+
+**The schema stays forward-compatible in the meantime.** `kind` survives as the group label, and
+today's `treats` / `happiness` / `drift` become sugar for single-entry `effects` lists — so the
+fixtures and any mod written against the current schema keep working.
+
 ## 6. Toys — the play channel
 
 Durable, one "out" at a time, visible in the room. Home's play action uses whatever is out, which
@@ -383,7 +440,7 @@ Every number in this doc is a first guess and expects to move with playtesting.
 | **E3** | Toys — drift channel, one toy out, play-with-toy on Home. |
 | **E4** | Wish→gift loop, the six conversation hooks, `conv_lint` item cross-referencing. |
 | **E5** | Room decor — slots, home-scene background layers, sprites. |
-| **E6** | Evolution catalyst; Token of Amends; memorial keepsake on death. |
+| **E6** | Evolution catalyst; Token of Amends; memorial keepsake on death. **Plus the modding rework in §5.1** — the item schema stops being five fixed buckets and becomes composable effects. |
 
 **Why E2 is indivisible.** `Pet::conditionBlocked()` blocks battle, training and *all* minigames
 while anything is wrong, and its own comment already names the exception:

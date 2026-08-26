@@ -30,6 +30,7 @@ class SceneSmash : public Scene {
     // reward (shown on the game-over card)
     bool  rewarded_ = false;
     bool  tired_ = false;
+    uint32_t bits_ = 0;              // Bits paid for the session (shown on the card)
     int   gainStr_ = 0, gainHp_ = 0;
 
     void reset();

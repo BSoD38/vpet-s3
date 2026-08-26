@@ -1,4 +1,5 @@
 #pragma once
+#include <cstdint>
 
 // The read-only `gamedata` flash partition holds every data-driven system's base
 // content (foods now, conversations next), mounted once at /gamedata. Kept as a shared
@@ -24,7 +25,7 @@ bool gamedata_mount();
 // actually took from it, and the About screen adds the numbers up. That is the whole
 // mechanism: a counter bumped where an entry is accepted, nothing threaded through anything.
 enum GdSystem : unsigned char {
-    GD_CREATURES, GD_FOODS, GD_NATURES, GD_TRAITS, GD_SOUNDS, GD_CONFIG, GD_SYS_COUNT
+    GD_CREATURES, GD_FOODS, GD_ITEMS, GD_NATURES, GD_TRAITS, GD_SOUNDS, GD_CONFIG, GD_SYS_COUNT
 };
 
 void        gd_sd_loaded(GdSystem s, int n = 1);   // n more entries accepted from loose SD files
@@ -54,6 +55,11 @@ char* gd_read_file(const char* path, long cap);
 double gd_num(cJSON* o, const char* k, double def);
 void   gd_str(cJSON* o, const char* k, char* dst, int n, const char* def);
 bool   gd_bool(cJSON* o, const char* k, bool def);
+// "#RRGGBB" (or "RRGGBB") at o[k] -> rgb565. Anything else -- including LONGER hex strings,
+// which strtol would otherwise misparse into the wrong channels (or clamp to LONG_MAX, a
+// near-white swatch) -- returns `def`. Shared because every registry that draws a swatch
+// needs it, and a second copy is how the two quietly stop agreeing.
+uint16_t gd_color(cJSON* o, const char* k, uint16_t def);
 
 // Route ALL cJSON allocation to PSRAM. cJSON's hooks are process-global, so this is a policy
 // decision for the whole app and must be made before anything parses -- call it once from

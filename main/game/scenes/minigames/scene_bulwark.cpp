@@ -117,7 +117,8 @@ void SceneBulwark::award()
     float cost   = ENERGY_BASE + (float)score_ * ENERGY_PER;
 
     StatGain gains[] = { { STAT_END, rawEnd }, { STAT_AGI, rawAgi } };
-    TrainingResult r = grant_training(app().pet, cost, gains, 2, 2 + score_ / 6);
+    TrainingResult r = grant_training(app().pet, app().economy, cost, gains, 2, 2 + score_ / 6);
+    bits_ = r.bits;
 
     // Disciplined bravery -- the deliberate brave+/wild- decorrelator. Without a source
     // like this, "brave" and "unruly" would always move together and a whole quadrant of
@@ -265,7 +266,7 @@ void SceneBulwark::render()
     }
 
     if (phase_ == OVER) {
-        mg_over_card("GUARD DOWN");
+        mg_over_card("GUARD DOWN", bits_);
         mg_center(MG_CARD_Y + 40, 2, col::white, "Blocks %d", score_);
         mg_center(MG_CARD_Y + 68, 1, tired_ ? col::warn : col::good,
                   "+%d END  +%d AGI%s", gainEnd_, gainAgi_, tired_ ? "  tired!" : "");
