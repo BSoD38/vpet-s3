@@ -31,7 +31,9 @@ struct BattleEventRec {
 // ATB bars in real time (rate set by AGI); a ready actor executes a pre-armed move whose
 // effect scales with a 0..1 timing quality. Auto sides synthesize timing from aiSkill;
 // a manual (player) side supplies it via submitAttack/submitParry. Resolution is
-// serialized — only one action is in flight at a time.
+// serialized — only one action is in flight at a time, and the two gauges are
+// deliberately kept out of phase so the sides stop trading blows in lockstep (see the
+// PACING block in battle.cpp).
 class Battle {
 public:
     void begin(const Combatant& player, const Combatant& enemy, uint32_t seed);
@@ -64,11 +66,16 @@ private:
     Move      pendMove_ = Move::Strike;   // attack awaiting a parry decision
     float     pendAtkQ_ = 0.0f;
 
+    // --- pacing (see the PACING block in battle.cpp) ---
+    float     gap_ = 0.0f;                   // beat left before the next action may start
+    float     rateJit_[2] = { 1.0f, 1.0f };  // per-side charge-rate roll, refreshed on each refill
+
     uint32_t  rng_ = 1;
     BattleEventRec ring_[64];
     uint8_t   rHead_ = 0, rTail_ = 0;
 
     float rnd01();
+    float rollRateJitter();
     float synthQuality(float aiSkill);
     Move  chooseMove(const Combatant& c) const;
     void  emit(BattleEvent t, int actor, int target = 255, int32_t amount = 0, Move m = Move::Strike);

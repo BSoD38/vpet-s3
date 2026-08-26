@@ -32,6 +32,31 @@ static const float DODGE_MAX        = 0.15f;   // max full-evade chance, reached
 static const float DODGE_AGI_CAP    = 9999.0f;
 static const float AI_Q_SPREAD      = 0.25f;   // timing noise band for auto/AI actors
 
+// --- PACING: keeping the two ATB gauges out of phase -------------------------------------
+// Left alone, the scheduler locks the two sides into lockstep. Both start at 0, both fill at
+// a rate fixed by AGI, and both reset to exactly 0 after acting -- so two combatants with
+// similar AGI arrive ready on the same frame, trade a matched pair of blows, and re-sync for
+// the next cycle. The fight reads as call-and-response with dead air between, forever.
+//
+// Three small pieces of variation break that up. None of them touch damage, so none of them
+// change who wins -- only when the blows land:
+//
+//   1. An opening stagger. The side that would have won the ready-tie anyway (higher AGI)
+//      gets a rolled head start on its first charge, putting the gauges a quarter to a half
+//      cycle apart from the first exchange. AGI still decides who opens.
+//   2. A charge-rate roll, refreshed every time a gauge starts refilling. Without it the
+//      phase set by the stagger would hold exactly; with it the two sides keep drifting past
+//      each other, so no two exchanges are spaced quite alike.
+//   3. A beat between actions. Even out of phase, both gauges do sometimes fill together --
+//      and a defender whose own bar is already full would otherwise counter on the very next
+//      frame, which reads as one simultaneous blow. Gauges keep charging through the beat;
+//      only the *start* of the next action waits.
+static const float STAGGER_MIN      = 0.25f;   // opening head start for the faster side, in bars
+static const float STAGGER_MAX      = 0.55f;
+static const float ATB_RATE_JITTER  = 0.12f;   // per-refill charge-rate roll, +/- this fraction
+static const float ACTION_GAP_MIN   = 0.28f;   // shortest beat between two consecutive actions (s)
+static const float ACTION_GAP_MAX   = 0.62f;
+
 static float skill_mult(float q)
 {
     if (q < Q_GLANCE) return SKILL_GLANCE;
@@ -72,6 +97,11 @@ float Battle::rnd01()
     return (float)(rng_ & 0xFFFFFF) / (float)0x1000000;
 }
 
+float Battle::rollRateJitter()
+{
+    return 1.0f + (rnd01() * 2.0f - 1.0f) * ATB_RATE_JITTER;
+}
+
 float Battle::synthQuality(float aiSkill)
 {
     // Center on skill; better players are both higher and tighter (less spread).
@@ -110,6 +140,17 @@ void Battle::begin(const Combatant& player, const Combatant& enemy, uint32_t see
     winner_ = -1;
     rng_    = seed ? seed : 1u;
     rHead_ = rTail_ = 0;
+    gap_    = 0.0f;
+
+    // Opening stagger (PACING 1). The head start goes to the side that would have won the
+    // ready-tie anyway, so AGI still decides who opens; on a true tie the coin decides,
+    // which also drops the standing first-move edge side 0 used to get for free.
+    for (int i = 0; i < 2; i++) rateJit_[i] = rollRateJitter();
+    int lead = (c_[0].stat[STAT_AGI] > c_[1].stat[STAT_AGI]) ? 0
+             : (c_[1].stat[STAT_AGI] > c_[0].stat[STAT_AGI]) ? 1
+             : (rnd01() < 0.5f ? 0 : 1);
+    c_[lead].atb = STAGGER_MIN + rnd01() * (STAGGER_MAX - STAGGER_MIN);
+
     emit(BattleEvent::BattleStart, 0);
 }
 
@@ -118,9 +159,13 @@ void Battle::update(float dt)
     if (state_ != St::Charging) return;   // finished, or awaiting a manual submit
 
     for (int i = 0; i < 2; i++) {
-        c_[i].atb += atb_rate(c_[i]) * dt;
+        c_[i].atb += atb_rate(c_[i]) * rateJit_[i] * dt;   // PACING 2
         if (c_[i].atb > 1.0f) c_[i].atb = 1.0f;
     }
+
+    // PACING 3: the beat runs down while the gauges keep filling, so it never costs the
+    // fight time -- it only stops two actions from starting in the same breath.
+    if (gap_ > 0.0f) { gap_ -= dt; return; }
 
     bool r0 = c_[0].atb >= 1.0f, r1 = c_[1].atb >= 1.0f;
     int rdy = -1;
@@ -228,8 +273,12 @@ void Battle::resolveAttack(int actor, Move m, float atkQ, float parryQ)
 
 void Battle::finishAction()
 {
-    if (active_ >= 0) c_[active_].atb = 0.0f;   // reset the actor's charge
+    if (active_ >= 0) {
+        c_[active_].atb = 0.0f;                        // reset the actor's charge
+        rateJit_[active_] = rollRateJitter();          // fresh roll for the refill (PACING 2)
+    }
     active_ = -1;
+    gap_ = ACTION_GAP_MIN + rnd01() * (ACTION_GAP_MAX - ACTION_GAP_MIN);   // PACING 3
     if (state_ != St::Done) state_ = St::Charging;
 }
 

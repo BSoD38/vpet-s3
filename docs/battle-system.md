@@ -67,6 +67,45 @@ Screen (240×320 portrait): enemy up top, your pet at the bottom. Each has an **
 ever on screen at once. If both bars fill together, higher **AGI** acts first and the other
 holds at full, waiting its turn. No colliding prompts on a small panel.
 
+**Pacing — keeping the two bars out of phase.** Serialized resolution is not enough on its
+own. Both bars start at 0, fill at a rate fixed by AGI, and reset to exactly 0 after acting, so
+two fighters with similar AGI arrive ready on the same frame, trade a matched pair of blows,
+and re-sync for the next cycle — forever. Measured on the host harness (below), **half of all
+actions used to start within one frame of the previous one**: the fight read as call-and-
+response with dead air between, and it did so in every matchup, not just mirror matches. Fill
+time is interpolated across AGI 0..9999, so any AGI a real pet has trained sits within a few
+milliseconds of the slow end — on rate, essentially every fight is a mirror match.
+
+Three small pieces of variation break it up. None touch damage, so none change who wins — only
+when the blows land:
+
+1. **Opening stagger.** The side that would have won the ready-tie anyway (higher AGI) gets a
+   rolled head start of 0.25–0.55 bars, putting the gauges a quarter to a half cycle apart from
+   the first exchange. AGI still decides who opens; on a true tie a coin does, which also drops
+   the standing first-move edge the player used to get for free in a mirror match.
+2. **Charge-rate roll (±12%), refreshed every refill.** Without it the phase set by the
+   stagger would hold exactly. With it the two sides keep drifting past each other, so no two
+   exchanges are spaced quite alike.
+3. **A beat between actions (0.28–0.62 s).** Even out of phase both bars do sometimes fill
+   together, and a defender whose own bar is already full would otherwise counter on the very
+   next frame — which reads as one simultaneous blow. Bars keep charging through the beat, so
+   it never costs the fight time; only the *start* of the next action waits.
+
+Measured effect (`tools/battle_hosttest`, 40 auto-vs-auto fights per row) — "clump%" is the
+share of gaps shorter than a quarter of the mean, i.e. the lockstep signature:
+
+| Matchup | clump% before → after | shortest gap (p05) before → after | actions/fight |
+|---|---|---|---|
+| mirror (equal AGI)       | 51.6% → 0.3% | 0.02 s → 0.55 s | 724 → 708 |
+| near-tie (AGI 12 vs 13)  | 51.6% → 0.7% | 0.02 s → 0.58 s | 724 → 708 |
+| wide gap (AGI 400/8000)  | 11.8% → 0.0% | 0.09 s → 0.39 s | 1364 → 1317 |
+| fast pair (AGI 9500)     | 50.4% → 0.0% | 0.02 s → 0.44 s | 1733 → 1749 |
+
+Fight length is unchanged, and the core's own balance self-test (tier wall, type advantage,
+skill gap) returns identical results. The one thing that does move is the mirror match, which
+is now a coin flip instead of a standing win for side 0 — which is what a mirror match should
+be. See the `PACING` block in [`battle.cpp`](../main/game/battle/battle.cpp).
+
 **Graceful degradation = free classic mode.** A player who never touches the screen just leaves
 Strike armed; it auto-fires on neutral timing and no parries happen. That is exactly the future
 **"classic" spectate mode** — same engine, zero extra combat code. The later classic mode just
@@ -230,6 +269,10 @@ play on hardware in parallel).
   meter, parry, faint/win/lose, event queue, `PlayerIntent`). Build a player Combatant from the
   `Pet` and an enemy from a scaled registry creature.
 - *Verify:* auto-vs-auto battle logged over serial — fair fights competitive, tier gaps walls.
+  Or on the host: `tools/battle_hosttest` compiles the real core behind four small shims and
+  runs the same self-test plus a pacing report (see the harness header for the build line).
+  Rhythm problems are invisible in a serial log — every event arrives correct and in order;
+  it is only the *spacing* that is wrong — so they need timestamps and a distribution.
 
 **Phase 2 — Battle scene (live loop UI).**
 - `scenes/battle/scene_battle.{hpp,cpp}` — bars (`gfx_bar`), pre-armed Strike/Special, timing
