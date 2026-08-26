@@ -26,8 +26,13 @@ static const char* TAG = "PWR";
 // ---- button gesture timing (classified on release) ----
 static const int64_t HOLD_DEEP_US = 800LL  * 1000;   // >= this hold -> deep sleep
 static const int64_t HOLD_OFF_US  = 3000LL * 1000;   // >= this hold -> power off
-static const int64_t AUTO_LIGHT_US = 180LL  * 1000000;   // idle this long on Home -> light sleep
 static const int64_t AUTO_DEEP_US  = 900LL  * 1000000;   // total idle -> escalate light -> deep sleep
+
+// ---- screen settings (Settings -> SCREEN), live copies of the NVS values ----
+// Held here, not in the scene, because PowerManager::update() below is what actually
+// enforces the timeout, and the brightness is a device-wide level rather than a game one.
+static uint16_t s_screen_off_s  = SCREEN_OFF_DEF_S;
+static uint8_t  s_screen_bright = SCREEN_BRIGHT_DEF;
 
 // ---- deep-sleep wake triggers (with hysteresis so a stat that sits low doesn't
 //      re-wake the screen every poll: alert once on the way down, re-arm above CLR) ----
@@ -172,6 +177,52 @@ void power_service_timer_wake(SaveStore& save)
 }
 
 // ---------------------------------------------------------------------------
+// Screen settings
+// ---------------------------------------------------------------------------
+
+uint16_t screen_off_s() { return s_screen_off_s; }
+
+void set_screen_off_s(uint16_t s)
+{
+    if (s < SCREEN_OFF_MIN_S) s = SCREEN_OFF_MIN_S;
+    if (s > SCREEN_OFF_MAX_S) s = SCREEN_OFF_MAX_S;
+    // Snap to the step as well as clamp: the picker can only produce valid values, but a
+    // value read back from NVS was written by some older (or newer) build of this firmware,
+    // and one that landed between two steps would leave every button unhighlighted.
+    s = (uint16_t)(SCREEN_OFF_MIN_S +
+                   ((s - SCREEN_OFF_MIN_S) / SCREEN_OFF_STEP_S) * SCREEN_OFF_STEP_S);
+    s_screen_off_s = s;
+}
+
+uint8_t screen_brightness() { return s_screen_bright; }
+
+void set_screen_brightness(uint8_t pct)
+{
+    if (pct < SCREEN_BRIGHT_MIN) pct = SCREEN_BRIGHT_MIN;
+    if (pct > SCREEN_BRIGHT_MAX) pct = SCREEN_BRIGHT_MAX;
+    s_screen_bright = pct;
+    // LCD_Backlight is the driver's "lights on" level: Backlight_Init() lights the panel at
+    // it, and Pet::applyBacklight() picks between it and the night dim on every tick. Writing
+    // it rather than calling Set_Backlight() is deliberate -- driving the panel from here too
+    // would fight the pet for the duty cycle while a night-dimmed player drags the slider.
+    LCD_Backlight = pct;
+}
+
+void screen_settings_load(const SaveStore& save)
+{
+    set_screen_off_s(save.loadU8("scrOff", (uint8_t)SCREEN_OFF_DEF_S));
+    set_screen_brightness(save.loadU8("scrBri", SCREEN_BRIGHT_DEF));
+}
+
+void screen_settings_store(const SaveStore& save)
+{
+    save.beginBatch();
+    save.storeU8("scrOff", (uint8_t)s_screen_off_s);
+    save.storeU8("scrBri", s_screen_bright);
+    save.endBatch();
+}
+
+// ---------------------------------------------------------------------------
 // Sleep / backlight actions
 // ---------------------------------------------------------------------------
 
@@ -276,10 +327,11 @@ PowerAction PowerManager::update(bool touchActivity, bool sleepAllowed, int64_t 
         }
         if (releaseEdge) btnConsumed_ = false;
 
-        // Auto light-sleep after sustained inactivity, where the scene permits it and
-        // never mid-press.
+        // Auto light-sleep after the player-set screen timeout (Settings -> SCREEN), where
+        // the scene permits it and never mid-press. Read live rather than cached at begin():
+        // changing the setting should take hold on the next frame, not the next boot.
         if (act == PowerAction::None && sleepAllowed && !btn &&
-            (nowUs - lastActUs_) >= AUTO_LIGHT_US) {
+            (nowUs - lastActUs_) >= (int64_t)screen_off_s() * 1000000LL) {
             act = PowerAction::EnterLight;
         }
 

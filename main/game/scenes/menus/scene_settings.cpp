@@ -3,15 +3,18 @@
 #include "engine/gfx.hpp"
 #include "engine/util.hpp"        // clampf
 #include "engine/audio/audio.hpp"
+#include "engine/power.hpp"       // screen timeout + brightness settings
 #include "engine/audio/sfx.hpp"
 #include "ui/tabs.hpp"
 #include "ui/widgets.hpp"
 #include <cstring>
 #include <cstdio>
 
-// tab bar
-static const char* const TABS[] = { "GAME", "SOUND", "SYSTEM" };
-static const int TAB_N = 3;
+// tab bar. Four tabs across 224px leave ~52px each, which a size-2 "SYSTEM" (72px) would
+// overrun, so the whole bar draws its labels at size 1.
+static const char* const TABS[] = { "GAME", "SOUND", "SCREEN", "SYSTEM" };
+static const int TAB_N = 4;
+static const int TAB_SIZE = 1;
 static const int TAB_X = 8, TAB_Y = 44, TAB_W = GAME_W - 16, TAB_H = 32;
 
 // SOUND page: three volume sliders and a mute row.
@@ -62,6 +65,33 @@ static const int ROW_X = 16, ROW_W = GAME_W - 32, ROW_H = 34;
 static const int SYS_H  = 30;
 static const int DBG_Y = 92, TIME_Y = 130, CHEAT_Y = 168, UPD_Y = 206, ABOUT_Y = 244, RESET_Y = 282;
 
+// SCREEN page: a 4-way picker for the screen timeout and a brightness slider. Both are
+// DEVICE settings rather than game ones -- they belong to the board, not to the creature.
+static const int SCR_TO_LBL_Y  = 96;
+static const int SCR_TO_Y      = 110;   // picker row, ROW_H tall
+static const int SCR_TO_HINT_Y = 152;
+static const int SCR_BRI_Y     = 210;   // slider top; draw_slider puts its label 15px above
+static const int SCR_BRI_HINT_Y= 252;
+
+// One segment of the timeout picker. Same x/width as the full-width rows, cut into
+// SCREEN_OFF_N equal pills with the same 4px gap the tab bar uses.
+static Rect timeout_seg(int i)
+{
+    const int seg = ROW_W / SCREEN_OFF_N;
+    return { ROW_X + i * seg, SCR_TO_Y, seg - 4, ROW_H };
+}
+static const Rect kBriSld{ SLD_X, SCR_BRI_Y, SLD_W, SLD_H };
+
+// Finger x -> brightness percent. Maps the WHOLE track to 0..100 and lets the setter clamp,
+// rather than mapping it to MIN..100: the fill then shows the true percentage, and the dead
+// strip at the left end is an honest picture of the floor instead of a hidden offset.
+static uint8_t bright_from_x(int px)
+{
+    float f = (float)(px - kBriSld.x) / (float)kBriSld.w;
+    f = clampf(f, 0.0f, 1.0f);
+    return (uint8_t)(f * 100.0f + 0.5f);
+}
+
 // Factory-reset confirm page: the erase button must be HELD for HOLD_S seconds (a tap,
 // however unlucky, can't wipe a save). Progress resets the moment the finger leaves.
 static const float HOLD_S = 3.0f;
@@ -78,6 +108,7 @@ void SceneSettings::onEnter()
     confirmReset_ = false;
     holdT_ = 0.0f;
     dragSlider_ = -1;
+    dragBright_ = false;
 }
 
 // Hold-to-erase progress, and volume-slider dragging. Both need the LIVE touch position
@@ -97,6 +128,20 @@ void SceneSettings::update(float dt)
             // like. Skipped for the music slider: music is already playing at it.
             if (dragSlider_ != 1) sfx::play(sfx::kSelect);
             dragSlider_ = -1;
+        }
+    }
+
+    // Brightness follows the finger and lands in NVS once, on release -- same reasoning as
+    // the volume sliders above. It re-applies through the pet rather than calling the driver
+    // directly, so a creature whose lights are off stays dimmed while the setting moves.
+    if (dragBright_) {
+        if (down_) {
+            set_screen_brightness(bright_from_x(tx_));
+            app().pet.refreshBacklight();
+        } else {
+            screen_settings_store(app().save);
+            sfx::play(sfx::kSelect);
+            dragBright_ = false;
         }
     }
 
@@ -168,6 +213,33 @@ static void render_sound(App& app)
     }
 }
 
+// SCREEN page. The timeout is a row of discrete buttons rather than a slider: there are only
+// four values, and a slider would invite dragging for a precision the setting doesn't have.
+static void render_screen()
+{
+    gfx_text(16, SCR_TO_LBL_Y, 1, col::dim, "Screen timeout");
+
+    const uint16_t cur = screen_off_s();
+    for (int i = 0; i < SCREEN_OFF_N; i++) {
+        const uint16_t s  = (uint16_t)(SCREEN_OFF_MIN_S + i * SCREEN_OFF_STEP_S);
+        const bool     on = (s == cur);
+        char lbl[8];
+        snprintf(lbl, sizeof lbl, "%us", (unsigned)s);
+        timeout_seg(i).button(lbl, on ? col::accent : rgb565(60, 64, 84),
+                              on ? col::black : col::white);
+    }
+    gfx_text_wrap(16, SCR_TO_HINT_Y, GAME_W - 32, 1, col::dim,
+                  "Screen turns off after this long with nothing touched. A tap or the "
+                  "PWR button wakes it.", 2, -1, 3);
+
+    // Live value, not a cached one: dragging this slider changes the panel on the spot.
+    draw_slider(kBriSld, "Brightness", screen_brightness() / 100.0f,
+                rgb565(240, 200, 90), false);
+    gfx_text_wrap(16, SCR_BRI_HINT_Y, GAME_W - 32, 1, col::dim,
+                  "Never below 20%, so it can't go dark enough to hide this slider. "
+                  "Dims further while your pet's lights are off.", 2, -1, 4);
+}
+
 static void render_system(App& app)
 {
     bool dbg = app.debugOverlay;
@@ -235,10 +307,11 @@ void SceneSettings::render()
 
     draw_back();
 
-    tabbar_draw(TAB_X, TAB_Y, TAB_W, TAB_H, TABS, TAB_N, page_);
+    tabbar_draw(TAB_X, TAB_Y, TAB_W, TAB_H, TABS, TAB_N, page_, TAB_SIZE);
 
-    if (page_ == 0)      render_game(app());
+    if      (page_ == 0) render_game(app());
     else if (page_ == 1) render_sound(app());
+    else if (page_ == 2) render_screen();
     else                 render_system(app());
 }
 
@@ -265,7 +338,7 @@ void SceneSettings::onInput(const Input& in)
     int tab = tabbar_hit(in.x, in.y, TAB_X, TAB_Y, TAB_W, TAB_H, TAB_N);
     if (tab >= 0) {
         if (tab != page_) sfx::play(sfx::kTap);   // re-tapping the open tab changes nothing
-        page_ = tab; dragSlider_ = -1;
+        page_ = tab; dragSlider_ = -1; dragBright_ = false;
         return;
     }
 
@@ -283,6 +356,25 @@ void SceneSettings::onInput(const Input& in)
             // Deliberately after the toggle: unmuting is confirmed by hearing it, and
             // muting is confirmed by NOT hearing it.
             sfx::play(sfx::kSelect);
+            return;
+        }
+        return;
+    }
+
+    if (page_ == 2) {
+        for (int i = 0; i < SCREEN_OFF_N; i++) {
+            if (!timeout_seg(i).contains(in)) continue;
+            const uint16_t s = (uint16_t)(SCREEN_OFF_MIN_S + i * SCREEN_OFF_STEP_S);
+            if (s == screen_off_s()) { sfx::play(sfx::kTap); return; }   // already the choice
+            set_screen_off_s(s);
+            screen_settings_store(app().save);   // one key, one tap: no drag to batch
+            sfx::play(sfx::kSelect);
+            return;
+        }
+        if (kBriSld.contains(in)) {
+            dragBright_ = true;                  // update() takes it from here
+            set_screen_brightness(bright_from_x(in.x));
+            app().pet.refreshBacklight();
             return;
         }
         return;

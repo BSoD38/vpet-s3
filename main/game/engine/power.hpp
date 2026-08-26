@@ -16,6 +16,40 @@ enum class PowerAction : uint8_t { None, EnterLight, ExitLight, EnterDeep, Power
 // timekeeping and test the wake triggers, then either surfaces or drops back to sleep.
 constexpr uint32_t POWER_DEEP_POLL_S = 15 * 60;
 
+// ---- screen settings (Settings -> SCREEN; live values backed by NVS) ----
+
+// How long the device sits with no touch and no button before the screen turns off.
+// Four choices, 15s..60s. Kept here rather than in the scene because the inactivity
+// timer that consumes it lives in PowerManager::update() below.
+constexpr uint16_t SCREEN_OFF_MIN_S  = 15;
+constexpr uint16_t SCREEN_OFF_MAX_S  = 60;
+constexpr uint16_t SCREEN_OFF_STEP_S = 15;
+constexpr uint16_t SCREEN_OFF_DEF_S  = 60;
+constexpr int      SCREEN_OFF_N =
+    (SCREEN_OFF_MAX_S - SCREEN_OFF_MIN_S) / SCREEN_OFF_STEP_S + 1;   // 4 steps
+
+// Panel brightness, in percent. The floor is the whole reason this setting needs one: a
+// player who drags to 0 blacks the screen out, and the control that would undo it is ON
+// that screen. Anything at or above the floor is still readable in a dark room.
+constexpr uint8_t SCREEN_BRIGHT_MIN = 20;
+constexpr uint8_t SCREEN_BRIGHT_MAX = 100;
+constexpr uint8_t SCREEN_BRIGHT_DEF = 70;
+
+// Read both settings out of NVS into the live values. Call from app_main BEFORE
+// LCD_Init(), so Backlight_Init() lights the panel at the player's level instead of
+// flashing the default and then correcting itself.
+void screen_settings_load(const SaveStore& save);
+void screen_settings_store(const SaveStore& save);   // both keys, one commit
+
+uint16_t screen_off_s();
+void     set_screen_off_s(uint16_t s);   // clamped to the range and snapped to the step
+
+uint8_t  screen_brightness();
+// Records the player's brightness -- the level Pet::applyBacklight() treats as "lights
+// on". It deliberately does NOT drive the panel itself: the pet owns the final level,
+// because it also owns the night dim. Callers apply it via Pet::refreshBacklight().
+void     set_screen_brightness(uint8_t pct);
+
 // ---- boot-path entry points (called from app_main, before the game task) ----
 
 // Release any pads frozen by the deep-sleep hold and re-assert the power latch so the

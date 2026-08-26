@@ -1,12 +1,12 @@
 #pragma once
 #include "core/scene.hpp"
 
-// Settings: three tabbed pages. GAME = care freeze. SOUND = master/music/effects volume and
-// mute. SYSTEM = debug overlay toggle, set time/date, cheats screen, factory reset, species
-// info. Reached from Menu -> Settings. (Game speed moved to the Cheats screen: it is a
-// testing aid, not a player option.)
+// Settings: four tabbed pages. GAME = care freeze. SOUND = master/music/effects volume and
+// mute. SCREEN = how long the screen stays on and how bright it is. SYSTEM = debug overlay
+// toggle, set time/date, cheats screen, update, about, factory reset. Reached from Menu ->
+// Settings. (Game speed moved to the Cheats screen: it is a testing aid, not a player option.)
 class SceneSettings : public Scene {
-    int page_ = 0;   // 0 = Game, 1 = Sound, 2 = System
+    int page_ = 0;   // 0 = Game, 1 = Sound, 2 = Screen, 3 = System
     // Factory-reset confirmation: a dedicated sub-page with a HOLD-to-erase button, so a
     // stray double-tap can never wipe the save. holdT_ accumulates while the finger stays
     // on the button and resets the moment it leaves.
@@ -18,6 +18,10 @@ class SceneSettings : public Scene {
     // controlling the slider it started on even when the finger wanders off it vertically,
     // and so the new value is only written to NVS once, on release.
     int8_t  dragSlider_ = -1;
+    // The brightness slider, latched the same way and for the same reasons. Kept separate
+    // from dragSlider_ rather than folded in as a fourth index: it lives on another page and
+    // reads/writes the panel, not the mixer.
+    bool    dragBright_ = false;
 public:
     void onEnter() override;
     void update(float dt) override;

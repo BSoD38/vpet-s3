@@ -42,7 +42,11 @@ static const uint32_t MAX_OFFLINE          = 24u * 3600u;
 // one loses only the 24h it would have been trimmed to -- while a clock correction stops
 // arriving as a full day of neglect on a creature that was never neglected.
 static const uint32_t CLOCK_JUMP_MAX       = 30u * 86400u;
-static const int      SLEEP_BACKLIGHT      = 25;
+// Night dim, as a PERCENTAGE of the player's brightness rather than a fixed level: the
+// brightness setting (Settings -> SCREEN) can now go as low as 20, and a fixed 25 would have
+// made the pet's "lights off" screen BRIGHTER than its lights-on one.
+static const int      SLEEP_BACKLIGHT_PCT  = 35;
+static const int      SLEEP_BACKLIGHT_MIN  = 5;
 static const float    DAY_LEN              = 86400.0f;
 static const float    ENERGY_MAX           = 100.0f;
 static const float    ENERGY_REGEN_HR      = 100.0f / 8.0f;   // training stamina: ~8h awake to refill
@@ -148,10 +152,13 @@ const Creature* Pet::cur() const
 // Panel brightness follows the creature's lights -- EXCEPT while frozen. The day/night clock
 // isn't running then, so a night dim would never lift on its own, and toggleLights() (the way
 // a player would normally undo it) refuses while the freeze is on: the pet would be stuck
-// behind a 25%-lit screen for the whole trip. A paused game is a game being LOOKED at.
+// behind a dimmed screen for the whole trip. A paused game is a game being LOOKED at.
 void Pet::applyBacklight() const
 {
-    Set_Backlight((s_.lightsOff && !frozen_) ? SLEEP_BACKLIGHT : LCD_Backlight);
+    const int lit = LCD_Backlight;                       // the player's chosen brightness
+    int dim = lit * SLEEP_BACKLIGHT_PCT / 100;
+    if (dim < SLEEP_BACKLIGHT_MIN) dim = SLEEP_BACKLIGHT_MIN;   // dim, never off
+    Set_Backlight((uint8_t)((s_.lightsOff && !frozen_) ? dim : lit));
 }
 
 // sleep window test; window may wrap past midnight (e.g. 22 -> 7)

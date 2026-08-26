@@ -42,11 +42,12 @@ Instead: **deep sleep with a periodic RTC-timer wake** (CPU wakes briefly every
 
 ## Light sleep
 
-Screen off, simulation still running. Entered by a short PWR press or after
-`AUTO_LIGHT_US` (3 min) of no input; exited by any touch or PWR press. If nothing happens
-for `AUTO_DEEP_US` (15 min total idle) it **escalates to deep sleep** on its own — light
-sleep still runs the CPU at 240 MHz, so the real battery savings only start at deep sleep.
-(Manual deep sleep is the ~1 s PWR hold below.)
+Screen off, simulation still running. Entered by a short PWR press or after the player's
+**screen timeout** (Settings -> SCREEN, 15/30/45/60 s, default 60 s) of no input; exited by
+any touch or PWR press. If nothing happens for `AUTO_DEEP_US` (15 min total idle) it
+**escalates to deep sleep** on its own — light sleep still runs the CPU at 240 MHz, so the
+real battery savings only start at deep sleep. (Manual deep sleep is the ~1 s PWR hold
+below.)
 
 ### Where sleep is allowed
 
@@ -170,6 +171,27 @@ All gestures are classified on **release** (see `PowerManager::update`):
 The press that wakes from light sleep is *consumed* so it isn't also read as a hold. On deep
 sleep entry we wait for the button to be released before arming the GPIO wake, so the board
 doesn't instantly re-wake on the same press.
+
+## Screen settings
+
+Two device settings under **Settings → SCREEN**, both stored in their own NVS keys
+(`scrOff`, `scrBri`) and loaded by `screen_settings_load()` in `app_main` *before*
+`LCD_Init()` — so the panel opens at the player's brightness rather than flashing the
+default and correcting itself a moment later.
+
+| Setting | Range | Notes |
+|---------|-------|-------|
+| Screen timeout | 15 / 30 / 45 / 60 s (default 60) | How long with no touch and no button before light sleep. Read live by `PowerManager::update()`, so a change takes effect on the next frame. |
+| Brightness | 20–100 % (default 70) | The floor is deliberate: at 0 the screen is black, and the control that would undo that is *on* the screen. |
+
+Brightness is stored, not applied, by `set_screen_brightness()` — it writes
+`LCD_Backlight`, the driver's "lights on" level, and leaves the panel alone. The pet owns
+the final duty cycle, because the pet is the only thing that knows whether the creature's
+lights are currently off; callers push a change through `Pet::refreshBacklight()`.
+
+That night dim used to be a fixed 25 %. It is now **35 % of the player's brightness**
+(floor 5), because a fixed level would have been *brighter* than a lights-on screen set to
+the 20 % minimum.
 
 ## Battery gauge and charging
 

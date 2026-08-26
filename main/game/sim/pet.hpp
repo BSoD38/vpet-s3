@@ -195,6 +195,12 @@ public:
     // feature is simply off). Minigames call nudgeDrift() directly with their own vector,
     // the same way each already owns its stat-gain table.
     void setDriftSink(PersonalityTracker* d) { drift_ = d; }
+
+    // Re-assert the panel brightness after the player changes it (Settings -> SCREEN).
+    // The pet is the only thing allowed to drive the backlight, because it is the only
+    // thing that knows whether the creature's lights are currently off.
+    void refreshBacklight() const { applyBacklight(); }
+
     void nudgeDrift(const float d[AX_COUNT], float strength = 1.0f);
 
     // Apply one conversation choice. One-shot story conversations are MILESTONE bonding --

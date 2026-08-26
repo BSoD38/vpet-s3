@@ -79,6 +79,11 @@ extern "C" void app_main(void)
     // NOTE: audio is brought up in App::init(), not here -- the mixer is useless until the
     // mod packs are mounted and the sound bank has been scanned out of them.
 
+    // Screen brightness + timeout, BEFORE the backlight comes up: Backlight_Init() lights
+    // the panel at LCD_Backlight, so loading first is the difference between the panel
+    // opening at the player's level and flashing the default before correcting itself.
+    { SaveStore save; screen_settings_load(save); }
+
     Display_Init();   // LovyanGFX: SPI + ST7789 panel, cleared to black
     LCD_Init();       // backlight on + touch (CST328/CST3530)
 
