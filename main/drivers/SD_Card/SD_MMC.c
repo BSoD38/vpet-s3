@@ -56,6 +56,13 @@ void SD_Init(void)
 {
     esp_err_t ret;
 
+    // Idempotent: the deep-sleep timer-wake path mounts the card headlessly (the creature
+    // roster can live in a mod pack under /sdcard/mods), and if a wake trigger fires it then
+    // falls through to app_main, which calls this again. A second esp_vfs_fat_sdmmc_mount()
+    // on the same mount point fails, and the convenience wrapper tears the host down on its
+    // way out -- taking the working card with it.
+    if (s_card != NULL) return;
+
     // Options for mounting the filesystem.
     // If format_if_mount_failed is set to true, SD card will be partitioned and formatted in case when mounting fails.  false true
     esp_vfs_fat_sdmmc_mount_config_t mount_config = {

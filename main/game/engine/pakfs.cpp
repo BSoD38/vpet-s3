@@ -352,6 +352,17 @@ static const esp_vfs_fs_ops_t s_fs_ops = {
 
 static bool mount_one(const char* srcPath)
 {
+    // Idempotent per source. The deep-sleep timer-wake path mounts the packs headlessly to
+    // read the roster, and when a wake trigger fires it falls through to App::init, which
+    // mounts the same two sources again. Without this, base.pak would come back as a SECOND,
+    // stronger /pakN -- inverting the override order it is mounted first to establish -- and
+    // burn a slot out of PAKFS_MAX_PAKS while it was at it.
+    for (int i = 0; i < s_count; i++)
+        if (strcmp(s_paks[i].src, srcPath) == 0) {
+            ESP_LOGD(TAG, "%s already mounted at %s", srcPath, s_paks[i].mount);
+            return false;
+        }
+
     // The one choke point that writes s_paks[s_count], so the bound is enforced here rather
     // than trusted to callers -- pakfs_mount_all is invoked once per pack source per boot.
     if (s_count >= PAKFS_MAX_PAKS) {

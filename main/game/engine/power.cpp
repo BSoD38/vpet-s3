@@ -3,6 +3,8 @@
 #include "sim/save.hpp"
 #include "sim/creatures.hpp"
 #include "sim/personality.hpp"    // drift must ride along on headless catch-up
+#include "sim/gamedata.hpp"       // gamedata_mount / GAMEDATA_ROOT (the registries' data)
+#include "engine/pakfs.hpp"       // pakfs_mount_all: the mod packs the roster lives in
 #include "engine/display.hpp"     // display.sleep() / display.wakeup()
 #include "engine/audio/audio.hpp" // park the DAC before the power goes (see power_off)
 
@@ -16,6 +18,7 @@
 extern "C" {
 #include "PWR_Key.h"              // PWR_Key_Down, Shutdown, PWR_*_PIN
 #include "ST7789.h"               // Set_Backlight, Backlight_Suspend
+#include "SD_MMC.h"               // SD_Init (idempotent), for /sdcard/mods on the headless poll
 }
 
 static const char* TAG = "PWR";
@@ -78,6 +81,29 @@ void power_service_timer_wake(SaveStore& save)
     PetState pre{};
     uint8_t oldStage = save.load(pre) ? pre.stage : 0;
 
+    // MOUNT THE GAME DATA FIRST. The registries below read every creature, nature and tuning
+    // value out of the gamedata partition and the mod packs, and this path is reached from
+    // app_main long before App::init -- which is the only place that mounts them. Without
+    // these four lines CreatureRegistry::loadAll() saw zero files, fell back to its built-in
+    // placeholder egg, and Pet::boot()'s "saved creature not in registry" backstop rewrote
+    // the save to that egg -- which markSaved() then persisted. Every 15-minute poll reset
+    // the pet to an egg, so the next time the player picked the device up it re-hatched into
+    // a brand-new In-Training I with full hunger/happiness and a zeroed stage timer: a day
+    // away read as a couple of minutes, and the creature could never evolve again.
+    //
+    // Same order as App::init, because the order IS the override rule: /pak0 (the base game)
+    // must mount first so a player's pack can override it. The card is brought up
+    // unconditionally rather than only when the base packs fail to resolve the species: an
+    // SD pack may OVERRIDE a base creature's evolution edges or tuning, and a mod that only
+    // applies while the player is looking at the screen is the same class of silent
+    // online/offline divergence this whole function exists to avoid. It costs the poll one
+    // SD bring-up; the roster load out of flash already dominates that.
+    gamedata_json_use_psram();        // JSON trees into PSRAM, before the first parse
+    gamedata_mount();                 // base data partition -> /gamedata
+    pakfs_mount_all(GAMEDATA_ROOT);   // base.pak -> /pak0 (weakest layer)
+    SD_Init();                        // idempotent; the card carries user packs + loose mods
+    pakfs_mount_all("/sdcard/mods");  // user mods -> /pak1..
+
     // Advance the sim over the elapsed real time using the SAME path as a normal boot.
     // Heap-allocated: the registries are ~15 KB and app_main's stack is small.
     CreatureRegistry* reg = new CreatureRegistry();
@@ -97,6 +123,21 @@ void power_service_timer_wake(SaveStore& save)
     drift->boot();
     Pet* pet = new Pet(save, *reg);
     pet->setDriftSink(drift);
+
+    // Last line of defence, and the reason this check is worth having twice. App::init answers
+    // a missing species by asking the player (halt_for_missing_species); headless there is
+    // nobody to ask, and the only safe answer is to touch NOTHING -- boot() would rewrite the
+    // creature to an egg and markSaved() would persist that on the spot, irreversibly. Skip
+    // the catch-up and leave lastUpdate exactly where it is, so the absence isn't lost either:
+    // the next real boot still measures the whole gap and puts the question to the player.
+    char missingId[24];
+    if (pet->savedSpeciesMissing(missingId, sizeof missingId)) {
+        ESP_LOGE(TAG, "timer wake: saved creature '%s' not in the registry (card removed?) "
+                      "-> no catch-up, save untouched", missingId);
+        delete pet; delete drift; delete preg; delete reg;
+        power_enter_deep_sleep(POWER_DEEP_POLL_S);   // no return
+    }
+
     pet->boot();                    // seeds RTC, loads save, replays tick() + persists (markSaved)
     const PetState& p = pet->state();
 
