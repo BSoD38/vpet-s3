@@ -21,10 +21,10 @@ class SceneHome : public Scene {
     float   sparkTimer_ = 0.0f;    // >0 = poke-reward sparkles lingering
     float   playCooldown_ = 0.0f;  // >0 = petting locked out; hearts linger this long
     float   refuseTimer_ = 0.0f;   // >0 = pet is doing a "no" head-shake (refused an action)
+    float   ringHold_ = 0.0f;      // >0 = rub-progress ring still drawn (see RING_LINGER)
     float   pokeCd_ = 0.0f;        // short cooldown between individual pokes
     int     pokeCount_ = 0;        // pokes since the last happiness reward
     int     pokeTarget_ = 0;       // pokes needed this cycle (random 3..6; 0 = pick lazily)
-    bool    rubbingNow_ = false;   // finger over the pet and moving this frame
     bool    overPet_ = false;      // debug: finger over the pet zone this frame
     float   lastMove_ = 0.0f;      // debug: last per-frame movement (px)
     // Speech-bubble hit target. Computed in render() because it tracks the sprite's height;

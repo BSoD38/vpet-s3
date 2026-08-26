@@ -67,6 +67,12 @@ static Rect act_rect(int i) { return { act_x(i), ACT_Y, ACT_W, ACT_H }; }
 static const float PET_CHUNK_DIST  = 200.0f;  // px of rubbing per happiness chunk
 static const float PET_MOVE_DEADZ  = 1.0f;    // ignore <=1px jitter
 static const float PET_CHUNK       = 35.0f;   // happiness granted per chunk
+// The rub ring keeps drawing for a moment after the rub conditions lapse. They can lapse
+// for a frame or two in the middle of a perfectly good rub -- the finger crosses the hit
+// zone's edge, or the touch controller drops a poll -- and hiding it the instant they do
+// read as a flicker. Long enough to bridge that, short enough that letting go still feels
+// like letting go.
+static const float RING_LINGER     = 0.30f;   // rub ring lingers this long once the rub stops
 // Poke: a quick tap (short + little movement), detected on release. Poking is
 // cumulative — it takes a random 3..6 pokes (each with a short gap) to earn a
 // happiness reward; every poke bounces the pet, and the reward adds sparkles.
@@ -202,7 +208,6 @@ void SceneHome::update(float dt)
     bool interactive = p.stage != STAGE_EGG && !p.lightsOff && !pet.touchBlocked() && !frozen;
     bool overPet = interactive && onPetZone;    // can actually pet/poke
     overPet_ = overPet;
-    rubbingNow_ = false;
     bool justPressed  = down_ && !wasDown_;
     bool justReleased = !down_ && wasDown_;
 
@@ -249,7 +254,6 @@ void SceneHome::update(float dt)
         float eff = (move > PET_MOVE_DEADZ) ? move : 0.0f;   // filter jitter
         rubDist_ += eff;                                     // total travel (for poke test)
         if (overPet && eff > 0.0f) {                         // accumulate rub distance
-            rubbingNow_ = true;
             if (playCooldown_ <= 0.0f) {                     // not on cooldown
                 rubProgress_ += eff;
                 if (rubProgress_ >= PET_CHUNK_DIST) {        // earned a chunk
@@ -259,6 +263,7 @@ void SceneHome::update(float dt)
                     if (pet.play(PET_CHUNK, PLAY_AFFECTION)) {
                         pet.addFriendship(FR_PET);
                         playCooldown_ = PLAY_COOLDOWN;        // hearts linger for the cooldown
+                        ringHold_ = 0.0f;                     // hearts replace the ring at once
                         anim_.react(Anim::Happy, PLAY_COOLDOWN);
                     }
                 }
@@ -287,6 +292,12 @@ void SceneHome::update(float dt)
         }
         touchActive_ = false;
     }
+
+    // Rub ring: armed while the rub is live, then held for RING_LINGER once it isn't, so a
+    // momentary lapse in these conditions can't blink it off. Read by render(), which no
+    // longer tests them itself.
+    if (touchActive_ && overPet && playCooldown_ <= 0.0f && rubDist_ > POKE_MAX_DIST)
+        ringHold_ = RING_LINGER;
 
     // Locomotion. Stepped LAST so every reaction armed above is already visible to
     // anim_.walkCycle(), which is true only while the two-frame walk pose is on screen --
@@ -328,6 +339,7 @@ void SceneHome::update(float dt)
     if (pokeCd_ > 0)       pokeCd_ -= dt;
     if (playCooldown_ > 0) playCooldown_ -= dt;
     if (refuseTimer_ > 0)  refuseTimer_ -= dt;
+    if (ringHold_ > 0)     ringHold_ -= dt;
 }
 
 // Attention badge: a small pulsing "!" disc that prompts the player to go and LOOK at the
@@ -439,16 +451,16 @@ void SceneHome::render()
     if (spr) gfx_blit_sprite_bottom(spr, cx, feet, SPRITE_TRANSP, anim_.mirrored());
     else     gfx_blit(SPR_FALLBACK, cx, feet - SPRITE_H / 2);   // 48px "?" fallback, feet-anchored
 
-    // Rub-progress ring: only while actively able to pet (not during cooldown).
-    // Pink fill = progress to the next happiness chunk; bright when rubbing, dim when still.
-    if (touchActive_ && overPet_ && playCooldown_ <= 0.0f && rubDist_ > POKE_MAX_DIST) {
+    // Rub-progress ring: shown while ringHold_ is armed (a live rub, plus its tail -- update()).
+    // Pink fill = progress to the next happiness chunk. The fill colour is CONSTANT: it used
+    // to dim on any frame the finger wasn't moving, and since a rub has micro-pauses (plus a
+    // 1px deadzone) that read as a fast flicker rather than as feedback.
+    if (ringHold_ > 0.0f) {
         fb.fillArc(cx, cy, 30, 35, 0, 360, rgb565(50, 52, 62));
         float p = rubProgress_ / PET_CHUNK_DIST;
         if (p > 1.0f) p = 1.0f;
-        if (p > 0.0f) {
-            uint16_t fg = rubbingNow_ ? rgb565(255, 120, 160) : col::dim;
-            fb.fillArc(cx, cy, 30, 35, 0, (int)(p * 360.0f), fg);
-        }
+        if (p > 0.0f)
+            fb.fillArc(cx, cy, 30, 35, 0, (int)(p * 360.0f), rgb565(255, 120, 160));
     }
 
     // Petting reward: hearts linger for the cooldown.
