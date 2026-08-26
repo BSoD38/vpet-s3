@@ -635,7 +635,7 @@ void SceneHome::onInput(const Input& in)
                         else                    app().pet.playRefusal();
                         break;
                 case 1: app().pet.clean();        break;
-                case 2: app().pet.heal();         break;
+                case 2: app().setScene(SceneId::Medicine, Slide::Forward); break;
                 case 3: app().pet.toggleLights(); break;
             }
             return;

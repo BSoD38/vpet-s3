@@ -3,6 +3,7 @@
 #include "lineage.hpp"          // the ledger a death is written into (before its scene renders)
 #include "creatures.hpp"
 #include "foods.hpp"            // Food (chosen food drives feeding effects + drift)
+#include "items.hpp"            // TreatTrack / Potency / TREATS_NONE (treat() takes them as ints)
 #include "engine/util.hpp"      // clampf (shared)
 #include "engine/clock.hpp"
 #include "engine/drivers.hpp"    // Set_Backlight, LCD_Backlight, PCF85063_Read_Time, datetime
@@ -119,6 +120,13 @@ static const float CATCHUP_IDLE_STRENGTH = 0.5f;
 // Out-of-blob NVS keys. Anything stored here instead of in PetState avoids changing the
 // blob layout, which would bump PET_VERSION and wipe the player's pet.
 static const char* K_MOOD       = "mood";    // packed: (PetMood << 8) | mendProgress
+static const char* K_TREAT_CD   = "trcd";    // RTC second the treatment cooldown expires
+
+// How long after a CONDITION dose before another will take. Four hours is chosen against
+// what it costs: stepping Very Sick down to Sick stops the 1500/day drain immediately, so
+// the wait is paid in blocked activities rather than vitality -- and four hours of that is
+// what the expensive single-dose alternative is really selling.
+static const uint32_t TREAT_COOLDOWN_S = 4 * 3600;
 static const char* K_BONDP      = "bondp";   // routine bond points granted this window
 static const char* K_BONDT      = "bondt";   // RTC second the current 24h window began
 static const char* K_IDLE       = "idle";    // idle REAL-seconds since the last interaction
@@ -648,6 +656,7 @@ void Pet::markSavedAt(uint32_t now)
     save_.storeU32(K_BONDP, bondToday_);
     save_.storeU32(K_BONDT, bondWinT_);
     save_.storeU32(K_MOOD, ((uint32_t)mood_ << 8) | (uint32_t)mend_);
+    save_.storeU32(K_TREAT_CD, treatUntil_);
     // Persisted so the neglect clock survives reboots AND the 15-min deep-sleep wake
     // slices, each of which is shorter than IDLE_PERIOD on its own.
     save_.storeU32(K_IDLE, (uint32_t)idleSecs_);
@@ -799,6 +808,7 @@ void Pet::boot()
     bondToday_ = save_.loadU32(K_BONDP, 0);                   // daily bond allowance state
     bondWinT_  = save_.loadU32(K_BONDT, 0);
 
+    treatUntil_ = save_.loadU32(K_TREAT_CD, 0);               // a cooldown survives a reboot
     uint32_t mp = save_.loadU32(K_MOOD, 0);                   // how we left things
     mood_ = (uint8_t)(mp >> 8);
     mend_ = (uint8_t)(mp & 0xFFu);
@@ -912,26 +922,60 @@ void Pet::clean()
     markSaved();
 }
 
-void Pet::heal()
+uint32_t Pet::treatCooldownLeft() const
 {
-    if (careBlocked()) { sfx::play(sfx::kDenied); return; }
-    sfx::play(sfx::kHeal);
-    // One dose treats one step: mild sickness and injuries clear, serious sickness drops
-    // back to mild (a second dose finishes the job). Critical -- once it exists (D2) -- is
-    // past treating: the agency window is HERE, in the Sick states, by design
-    // (docs/death-and-lifespan.md §3). Healthy stays a plain health top-up, as ever.
-    switch (condition()) {
-        case COND_SICK_BAD: setCondition(COND_SICK,    "treated"); break;
-        case COND_SICK:
-        case COND_INJURED:  setCondition(COND_HEALTHY, "treated"); break;
-        default: break;
+    uint32_t now = clock_now();
+    return (treatUntil_ > now) ? treatUntil_ - now : 0;
+}
+
+bool Pet::treat(uint8_t track, uint8_t potency, int health)
+{
+    if (careBlocked()) { sfx::play(sfx::kDenied); return false; }
+
+    const Condition c = condition();
+    bool did = false;
+
+    // --- the condition half ---
+    if (track != TREATS_NONE) {
+        // Does this dose act on the track the creature is actually on? Critical is
+        // deliberately absent: it is past treating (docs/death-and-lifespan.md 3), and
+        // Recovery is convalescence that simply has to run its course.
+        const bool onTrack = (track == TRACK_SICK    && (c == COND_SICK || c == COND_SICK_BAD))
+                          || (track == TRACK_INJURED &&  c == COND_INJURED);
+        if (onTrack) {
+            if (treatCooldownLeft() > 0) {          // too soon after the last dose
+                refused_ = true;
+                sfx::play(sfx::kDenied);
+                return false;
+            }
+            // One step, unless the dose is strong enough to clear the track outright.
+            if (potency >= POTENCY_FULL || c != COND_SICK_BAD) setCondition(COND_HEALTHY, "treated");
+            else                                               setCondition(COND_SICK,    "treated");
+            treatUntil_ = clock_now() + TREAT_COOLDOWN_S;
+            addFriendship(FR_HEAL);
+            did = true;
+        }
     }
-    s_.health = clampf(s_.health + 40, 0, 100);
-    addFriendship(FR_HEAL);
+
+    // --- the HP half (a tonic has no track at all) ---
+    if (health > 0 && s_.health < 100.0f) {
+        s_.health = clampf(s_.health + (float)health, 0, 100);
+        did = true;
+    }
+
+    if (!did) {                        // nothing this dose could do: keep it in the bag
+        refused_ = true;
+        sfx::play(sfx::kDenied);
+        return false;
+    }
+
+    sfx::play(sfx::kHeal);
     idleSecs_ = 0.0f;                  // see clean(): duty still counts as interaction
-    ESP_LOGI(TAG, "heal (health=%.0f, condition=%s)", s_.health,
+    ESP_LOGI(TAG, "treat track=%u pot=%u hp+%d -> health=%.0f condition=%s",
+             (unsigned)track, (unsigned)potency, health, s_.health,
              conditionMarker() ? conditionMarker() : "OK");
     markSaved();
+    return true;
 }
 
 bool Pet::play(float amount, PlayKind kind)

@@ -42,15 +42,25 @@ static uint8_t parse_slot(const char* s)
     return DSLOT_NONE;
 }
 
+// A TRACK, not one state (see TreatTrack). "sick_bad" is accepted as a spelling of the
+// sickness track so content written against the first schema keeps loading.
+//
 // `critical` is deliberately NOT accepted: it is past treating by design
-// (docs/death-and-lifespan.md 3), so an item claiming to cure it would be a lie the
-// engine then has to enforce against.
+// (docs/death-and-lifespan.md 3), so an item claiming to cure it would be a lie the engine
+// then has to enforce against.
 static uint8_t parse_treats(const char* s)
 {
-    if (strcasecmp(s, "sick")     == 0) return COND_SICK;
-    if (strcasecmp(s, "sick_bad") == 0) return COND_SICK_BAD;
-    if (strcasecmp(s, "injured")  == 0) return COND_INJURED;
+    if (strcasecmp(s, "sick")     == 0) return TRACK_SICK;
+    if (strcasecmp(s, "sick_bad") == 0) return TRACK_SICK;
+    if (strcasecmp(s, "injured")  == 0) return TRACK_INJURED;
     return TREATS_NONE;
+}
+
+static uint8_t parse_potency(const char* s)
+{
+    if (!s[0] || strcasecmp(s, "step") == 0) return POTENCY_STEP;   // the default
+    if (strcasecmp(s, "full") == 0)          return POTENCY_FULL;
+    return 0;                                                        // unknown
 }
 
 const char* item_kind_name(uint8_t kind)
@@ -114,6 +124,10 @@ void ItemRegistry::parseEntry(cJSON* root, Item& it)
     gd_str(root, "treats", buf, sizeof buf, "");
     it.treats = buf[0] ? parse_treats(buf) : TREATS_NONE;
 
+    gd_str(root, "potency", buf, sizeof buf, "");
+    it.potency = parse_potency(buf);
+    it.health  = (int16_t)gd_num(root, "health", 0);
+
     cJSON* tags = cJSON_GetObjectItem(root, "tags");
     if (cJSON_IsArray(tags)) {
         cJSON* t = nullptr;
@@ -143,8 +157,15 @@ static bool validate(const Item& it, const char* where)
                  where, it.id);
         return false;
     }
-    if (it.kind == ITEM_CARE && it.treats == TREATS_NONE) {
-        ESP_LOGW(TAG, "%s: care item '%s' treats nothing, skipped (use sick/sick_bad/injured)",
+    // A care item must DO something: cure a condition, restore HP, or both. A tonic that
+    // only tops up HP is legitimate and declares no track at all.
+    if (it.kind == ITEM_CARE && it.treats == TREATS_NONE && it.health == 0) {
+        ESP_LOGW(TAG, "%s: care item '%s' does nothing, skipped "
+                      "(needs treats: sick/injured, or health: N)", where, it.id);
+        return false;
+    }
+    if (it.kind == ITEM_CARE && it.potency == 0) {
+        ESP_LOGW(TAG, "%s: care item '%s' has an unknown potency, skipped (use step/full)",
                  where, it.id);
         return false;
     }

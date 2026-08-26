@@ -1,6 +1,6 @@
 # Economy & Inventory
 
-Status: **design captured; nothing built.** Formerly the "Economy — money / shop / items" entry
+Status: **E1 and E2 built** (wallet, shop, bag, items, medicine, the pet-less shift). Formerly the "Economy — money / shop / items" entry
 in [roadmap.md](roadmap.md).
 
 The currency is **Bits**. This doc covers where they come from, what they buy, the inventory
@@ -45,7 +45,7 @@ Related: [food-and-feeding.md](food-and-feeding.md) (foods become stocked),
 | Training minigame | 15–25, scaled by score | **Energy** — already metered |
 | Battle win | 40–60 | Rare by nature |
 | Tower floor cleared | ~100 | Rare |
-| Pet-less minigame (§4, §14) | ~5 a round | **Uncapped** — deliberately too small to be income |
+| Pet-less shift (§4, §14) | 2–25, scaled by score | **Uncapped in frequency**, capped per shift |
 | The creature finds something | an *item*, not Bits | Walk cadence |
 
 A casual day (one session, ~4 minigames) is about **80 Bits**; an engaged day with battles is
@@ -74,8 +74,11 @@ greys out zeros — [food-and-feeding.md §5](food-and-feeding.md) was laid out 
 Stock is what makes §8 possible at all: with pay-at-feed-time there would be nothing *in* the bag
 to give away.
 
-**Escape hatch:** when stock is 0 and you can afford it, the feed row offers **buy one now,
-inline**. No trip to the shop at 2am to satisfy a craving.
+**A picker picks; the shop buys.** An earlier version let a zero-stock feed row buy one inline,
+which read as a convenience but made one control do two jobs — the row you tap every day to feed
+would sometimes spend Bits instead. An empty row now simply refuses, and both care pickers (Feed
+and Heal) carry a **Shop shortcut** in the header that returns you where you came from. Same rule
+on both screens: they show prices and your wallet, and neither one sells.
 
 **The risk, stated plainly:** flavoured foods are the personality expression channel, so pricing
 them puts a price on expression, and a broke player drifts neutral on kibble. Mitigated by keeping
@@ -108,12 +111,28 @@ leaving a creature ill for *hours and days*, never on the few minutes spent earn
 
 ### The doses
 
-| Item | ~Price | Treats | Note |
+| Item | ~Price | Does | Note |
 | --- | --- | --- | --- |
-| Bandage | 40 | `INJURED` → healthy | Stops the fester before it becomes sickness |
-| Remedy | 60 | `SICK` → healthy | Exactly today's single dose |
-| Strong medicine | 200 | `SICK_BAD` → healthy | Skips the two-dose path — saves a day at 1500/day |
+| Bandage | 40 | clears `INJURED` | Stops the fester before it becomes sickness |
+| Remedy | 60 | sickness track, **one step** | `SICK_BAD → SICK`, or `SICK → healthy` |
+| Strong medicine | 200 | sickness track, **full** | `SICK_BAD → healthy` outright |
+| Tonic | **500** | +40 HP | Buys back battle access early. See below |
 | — | — | `CRITICAL` | Still past treating, unchanged (death §3) |
+
+**A treatment cooldown of 4 hours** separates condition doses — the *"future heal-frequency
+limiter"* the battle doc anticipated. Without it two Remedies (120) would cure a serious illness
+instantly for less than one Strong Medicine (200), and the premium tier would be dead content.
+Stepping `SICK_BAD → SICK` stops the 1500/day drain immediately, so the wait is paid in blocked
+activities rather than in vitality — four hours of playable time is what the expensive dose is
+really selling. The cooldown does not apply to the Tonic, which is limited by costing Bits.
+
+**Why the Tonic is 500 and not 35.** HP regenerates on its own at 25/hour, and it gates only
+*battle* (`MIN_BATTLE_HP` = 20); minigames are gated by condition and energy instead. So +40 HP
+buys back about **1.6 hours** of battle access, for the price of **ten battle wins**. That is
+deliberately a bad trade: a cheap HP restore would make battling costless, which is the one thing
+the post-battle HP cost exists to prevent. It is a safety valve for "I want to fight *now*", not a
+staple — and it stays `common` rarity precisely so it is always on the shelf when that moment
+comes, rather than subject to the daily rotation.
 
 These map straight onto the one-step-per-dose `switch` already in `Pet::heal()`
 ([`pet.cpp`](../main/game/sim/pet.cpp)); the change is that a dose now comes out of the bag.
@@ -139,9 +158,16 @@ learned before it is ever an emergency.
 
 ### The floor
 
-The pet-less minigame (§14) is **uncapped, always available, and pays a very small amount** — a
-handful of Bits a round. From zero, a remedy is a few minutes. It is there for fun or for when
-there is no other choice; it is not meant to be anyone's income.
+The pet-less minigame (§14) is a **sorting shift**: parcels ride a belt, you tap the bin that
+takes the shape at the front, the bins swap as the pace climbs, and three dropped parcels end it.
+It is **uncapped in how often you can work** and always available, but one shift pays between 2
+and 25 Bits depending on how well you sorted. From zero, a remedy is a shift or two.
+
+An earlier version ran a flat forty seconds with no score. That made every shift identical and
+gave nothing to get better at, so it is now endless with a difficulty ramp: skill decides the pay,
+inside a ceiling. The ceiling is what keeps it a floor rather than a career -- even a superb shift
+is worse per minute than a battle win, so nobody rationally grinds it in preference to playing the
+game. It is there for fun, or for when there is no other choice.
 
 Uncapped × small is still unbounded given enough time, and that is fine **because nothing in this
 economy is power**: stat and training items were rejected (§10), decor is cosmetic by decision

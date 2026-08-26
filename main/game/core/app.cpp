@@ -221,6 +221,8 @@ void App::setScene(SceneId id, Slide slide)
         case SceneId::Rename:   scenes.set(&rename);   break;
         case SceneId::About:    scenes.set(&about);    break;
         case SceneId::Shop:     scenes.set(&shop);     break;
+        case SceneId::Medicine: scenes.set(&medicine); break;
+        case SceneId::Work:     scenes.set(&work);     break;
     }
 
     // Music follows the scene, decided here for the same reason the navigation sounds are:
@@ -247,7 +249,7 @@ void App::init()
     battle.bind(*this); battleSelect.bind(*this);
     settings.bind(*this); updateScene.bind(*this); cheats.bind(*this); timeset.bind(*this);
     stats.bind(*this); journal.bind(*this); rename.bind(*this); about.bind(*this);
-    shop.bind(*this);
+    shop.bind(*this); medicine.bind(*this); work.bind(*this);
 
     // Process-wide, and must precede every parse below: keeps JSON trees out of internal heap.
     gamedata_json_use_psram();
@@ -295,7 +297,15 @@ void App::init()
     pet.boot();                       // load save + offline aging, or hatch a new egg
     // A brand-new creature starts with a blank slate: its predecessor's conversation history
     // and journal don't belong to it. Player FACTS survive -- they're about the player.
-    if (pet.startedFresh()) conversations.clearSeen();
+    if (pet.startedFresh()) {
+        conversations.clearSeen();
+        // A starter remedy, at game start and with every successor. Treatment is a priced
+        // item now (docs/economy-and-inventory.md 4), and the worst possible way to learn
+        // that is to open the Heal screen for the first time with a sick creature, an empty
+        // bag and no Bits. One dose makes the mechanic teach itself while the stakes are
+        // still zero. Given only on a FRESH start, so it cannot be farmed by rebooting.
+        if (economy.add("remedy", ITEM_CARE)) economy.flush();
+    }
     debugOverlay = save.loadU8("dbg", 0) != 0;
     // A brink held from a previous session (drawer, power-off, deep sleep) resumes INTO
     // the death event -- never past it. The roll is long since persisted; the pet has

@@ -168,6 +168,9 @@ class Pet {
     int       cuIdleNudges_ = 0;     // idle nudges already granted during this catch-up
     bool      startedFresh_ = false;   // boot() hatched a new egg (no save was loaded)
     uint8_t   mood_ = MOOD_OK;         // PetMood; out-of-blob, per-creature
+    // RTC second the treatment cooldown expires. Its own NVS key, NOT VitalsSave: bumping
+    // that blob's version would cost the player their life meter.
+    uint32_t  treatUntil_ = 0;
     uint8_t   mend_ = 0;               // care shown since being upset (softens a step when full)
     bool      frozen_ = false;         // care freeze: the whole sim is suspended (see setFrozen)
     VitalsSave v_{};                   // life meter + condition timers; own NVS blob (see vitals.hpp)
@@ -258,7 +261,25 @@ public:
     // picker and silent from the home screen.
     void playRefusal() const;
     void clean();
-    void heal();
+
+    // --- treatment (docs/economy-and-inventory.md 4) --------------------------------------
+    // Treatment is an ITEM now, not a free tap. `track` is the item's TreatTrack (or
+    // TREATS_NONE), `potency` its Potency, `health` the HP it restores. Kept as plain
+    // integers so the simulation layer needn't include the item registry.
+    //
+    // Returns false and consumes NOTHING when the dose cannot be used -- wrong track, the
+    // creature is fine, or the cooldown is still running. The caller must not remove the
+    // item from the bag unless this returned true.
+    bool treat(uint8_t track, uint8_t potency, int health);
+
+    // Seconds left on the treatment cooldown, 0 if clear. A second CONDITION dose has to
+    // wait: without it two cheap remedies would cure a serious illness instantly for less
+    // than one strong dose costs, and the expensive tier would be dead content. Tonics
+    // (health-only) are not gated -- they are limited by costing Bits every time.
+    uint32_t treatCooldownLeft() const;
+
+    // The creature has something a dose could act on right now.
+    bool needsTreatment() const { return condition() != COND_HEALTHY && condition() != COND_RECOVERY; }
     void toggleLights();
     // Raise happiness; not saved per-call. Returns false when the touch was REFUSED
     // (egg/sick/asleep/upset) so the caller withholds friendship and reward FX too.

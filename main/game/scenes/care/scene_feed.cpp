@@ -26,6 +26,7 @@ void SceneFeed::render()
 
     fb.fillScreen(col::panel);
     gfx_text(PAD_X, 18, 3, col::accent, "FEED");
+    draw_shop_to();
     // Rows can buy (see onInput), so the wallet belongs on this screen too -- being told the
     // price of something without being told what you have is the wrong half of the story.
     draw_wallet(GAME_W - PAD_X, 42, app().economy.bits(), 1);
@@ -64,12 +65,9 @@ void SceneFeed::render()
             if (held > 0) {
                 snprintf(tagbuf, sizeof tagbuf, "x%d", held);
                 tagcol = col::white;
-            } else if (app().economy.canAfford(f.cost)) {
-                // Out of stock but affordable: the row becomes a buy button, so running dry
-                // never means a trip to the shop mid-feed.
-                snprintf(tagbuf, sizeof tagbuf, "BUY %u", (unsigned)f.cost);
-                tagcol = col::accent;
             } else {
+                // Out of stock: show what it costs, but this screen does not sell. A picker
+                // picks; buying is the Shop's job, one tap away at the top of the screen.
                 snprintf(tagbuf, sizeof tagbuf, "%u", (unsigned)f.cost);
                 tagcol = col::dim;
             }
@@ -97,6 +95,11 @@ void SceneFeed::onInput(const Input& in)
         app().setScene(SceneId::Home, Slide::Back);
         return;
     }
+    if (in.pressed && kShopTo.contains(in)) {
+        app().shop.setReturn(SceneId::Feed);
+        app().setScene(SceneId::Shop, Slide::Forward);
+        return;
+    }
 
     const int n = app().foods.count();
     list_.update(in, n);
@@ -106,16 +109,11 @@ void SceneFeed::onInput(const Input& in)
 
     const Food& f = app().foods.at(row);
 
-    // Out of stock: the tap BUYS one and stays put, so the next tap feeds it. Deliberately
-    // two gestures -- spending the player's Bits as a side effect of reaching for the food
-    // they always tap is exactly the kind of surprise a shop should never spring.
+    // Out of stock: refuse. This screen never spends the player's Bits -- reaching for the
+    // food you always tap must not be a purchase, and a picker that sometimes buys and
+    // sometimes feeds is two controls wearing one hat.
     if (f.cost > 0 && app().economy.count(f.id) == 0) {
-        if (app().economy.buy(f.id, ITEM_FOOD, f.cost)) {
-            app().economy.flush();
-            sfx::play(sfx::kSelect);
-        } else {
-            sfx::play(sfx::kDenied);
-        }
+        sfx::play(sfx::kDenied);
         return;
     }
 

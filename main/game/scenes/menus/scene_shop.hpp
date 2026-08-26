@@ -20,6 +20,10 @@
 // The Bag shares that page (minus the buy controls), because its rows truncate just as badly.
 class SceneShop : public Scene {
 public:
+    // Where Back goes. The Shop is reachable from the Menu and from either care picker, and
+    // dumping a player who came from Feed back at the Menu strands them away from the pet.
+    void setReturn(SceneId s) { returnTo_ = s; }
+
     void onEnter() override;
     void render() override;
     void onInput(const Input& in) override;
@@ -59,6 +63,7 @@ private:
     int      detailRow_ = -1;     // index into rows_
     int      qty_       = 1;      // quantity on the detail page
     float    flash_     = 0.0f;   // >0 = a purchase just landed (confirmation fades)
+    SceneId  returnTo_  = SceneId::Menu;
 
     void buildRows();             // rebuild rows_ for the active tab (grouped + sorted)
     void buildStock();            // Shop tab: what is on the shelf today

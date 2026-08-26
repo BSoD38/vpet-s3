@@ -484,7 +484,7 @@ void SceneShop::onInput(const Input& in)
     // page it returns to the list rather than leaving the shop -- one Back, one step.
     if (in.pressed && kBack.contains(in)) {
         if (detail_) { closeDetail(); sfx::play(sfx::kBack); }
-        else         app().setScene(SceneId::Menu, Slide::Back);
+        else         app().setScene(returnTo_, Slide::Back);
         return;
     }
 

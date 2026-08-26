@@ -47,9 +47,21 @@ enum DecorSlot : uint8_t {
     DSLOT_NONE = 0xFF
 };
 
-// Sentinel for "this item treats nothing" -- distinct from COND_HEALTHY, which as a
+// Sentinel for "this item treats no condition" -- distinct from COND_HEALTHY, which as a
 // `treats` value would mean "cures being well".
 constexpr uint8_t TREATS_NONE = 0xFF;
+
+// What a care item acts on. This names a TRACK, not one exact state: a remedy has to be
+// usable on a creature that has already got worse, or the only way to fix a Very Sick pet
+// would be the expensive dose and the cheap one would be a trap.
+//   TRACK_SICK    -> Sick and Very Sick
+//   TRACK_INJURED -> Injured
+enum TreatTrack : uint8_t { TRACK_SICK = 0, TRACK_INJURED };
+
+// How far one dose moves the condition. ONE step is the default and the reason the tiers
+// mean anything: two cheap doses and one expensive one reach the same place, but the cheap
+// route costs a treatment cooldown in between (see Pet::treat).
+enum Potency : uint8_t { POTENCY_STEP = 1, POTENCY_FULL = 2 };
 
 struct Item {
     char     id[24];
@@ -70,7 +82,9 @@ struct Item {
     int16_t  happiness;          // toys: happiness granted per play
     float    drift[AX_COUNT];    // toys: personality nudge, indexed by DriftAxis
     uint8_t  slot;               // decor: DecorSlot (DSLOT_NONE otherwise)
-    uint8_t  treats;             // care: Condition cured (TREATS_NONE otherwise)
+    uint8_t  treats;             // care: TreatTrack acted on (TREATS_NONE otherwise)
+    uint8_t  potency;            // care: Potency -- one step, or a full clear of the track
+    int16_t  health;             // care: HP restored (a tonic treats no condition at all)
 };
 
 class ItemRegistry {

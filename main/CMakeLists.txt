@@ -46,6 +46,7 @@ idf_component_register(
                               # game: scenes (screens, grouped by kind)
                               "./game/scenes/care/scene_home.cpp"
                               "./game/scenes/care/scene_feed.cpp"
+                              "./game/scenes/care/scene_medicine.cpp"
                               "./game/scenes/care/scene_conversation.cpp"
                               "./game/scenes/care/scene_death.cpp"
                               "./game/scenes/minigames/scene_run.cpp"
@@ -53,6 +54,7 @@ idf_component_register(
                               "./game/scenes/minigames/scene_smash.cpp"
                               "./game/scenes/minigames/scene_bulwark.cpp"
                               "./game/scenes/minigames/scene_stance.cpp"
+                              "./game/scenes/minigames/scene_work.cpp"
                               "./game/scenes/battle/scene_battle.cpp"
                               "./game/scenes/battle/scene_battle_draw.cpp"
                               "./game/scenes/menus/scene_battle_select.cpp"

@@ -1,0 +1,61 @@
+[
+  {
+    "id": "bandage",
+    "name": "Bandage",
+    "kind": "care",
+    "desc": "Clean cloth and a firm wrap.",
+    "tags": [
+      "care",
+      "wrap"
+    ],
+    "treats": "injured",
+    "potency": "full",
+    "cost": 40,
+    "rarity": "common",
+    "color": "#e8e2d4"
+  },
+  {
+    "id": "remedy",
+    "name": "Remedy",
+    "kind": "care",
+    "desc": "Bitter, warm, and it works.",
+    "tags": [
+      "care",
+      "herbal"
+    ],
+    "treats": "sick",
+    "potency": "step",
+    "cost": 60,
+    "rarity": "common",
+    "color": "#7fc98a"
+  },
+  {
+    "id": "strong_medicine",
+    "name": "Strong Medicine",
+    "kind": "care",
+    "desc": "Enough to turn the worst of it.",
+    "tags": [
+      "care",
+      "potent"
+    ],
+    "treats": "sick",
+    "potency": "full",
+    "cost": 200,
+    "rarity": "common",
+    "color": "#4f8fd4"
+  },
+  {
+    "id": "tonic",
+    "name": "Tonic",
+    "kind": "care",
+    "desc": "Instant vigour. Costs the earth.",
+    "tags": [
+      "care",
+      "sweet"
+    ],
+    "health": 40,
+    "cost": 500,
+    "rarity": "common",
+    "color": "#d4694f"
+  }
+]

@@ -12,6 +12,7 @@
 #include "scene.hpp"
 #include "scenes/care/scene_home.hpp"
 #include "scenes/care/scene_feed.hpp"
+#include "scenes/care/scene_medicine.hpp"
 #include "scenes/care/scene_conversation.hpp"
 #include "scenes/care/scene_death.hpp"
 #include "scenes/minigames/scene_run.hpp"
@@ -19,6 +20,7 @@
 #include "scenes/minigames/scene_smash.hpp"
 #include "scenes/minigames/scene_bulwark.hpp"
 #include "scenes/minigames/scene_stance.hpp"
+#include "scenes/minigames/scene_work.hpp"
 #include "scenes/battle/scene_battle.hpp"
 #include "scenes/menus/scene_battle_select.hpp"
 #include "scenes/menus/scene_activities.hpp"
@@ -55,6 +57,7 @@ public:
     SceneManager  scenes;
     SceneHome     home;
     SceneFeed     feedScene;             // food picker (named to avoid reading like pet.feed)
+    SceneMedicine medicine;              // treatment picker (Heal is an item now, not a free tap)
     SceneConversation conversationScene;
     SceneDeath    deathScene;            // the death event (entered by the brink, never by menu)
     SceneMenu     menu;
@@ -64,6 +67,7 @@ public:
     SceneSmash    smash;
     SceneBulwark  bulwark;
     SceneStance   stance;
+    SceneWork     work;                  // pet-less sorting shift: the floor under priced treatment
     SceneBattle   battle;
     SceneBattleSelect battleSelect;
     SceneSettings settings;

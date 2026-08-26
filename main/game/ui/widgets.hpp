@@ -79,6 +79,13 @@ inline void draw_wallet(int rightX, int y, uint32_t bits, int size = 2) {
 inline constexpr Rect kBack{ GAME_W - 72, 12, 60, 30 };
 inline void draw_back() { kBack.button("Back", col::accent, col::black); }
 
+// "Shop", sitting immediately left of Back. The care pickers (Feed, Heal) show prices and a
+// wallet but deliberately do NOT sell -- a picker picks, the shop buys -- so each one needs a
+// one-tap way to go and fix an empty shelf. Shared geometry so it lands in the same place on
+// every screen that offers it; x 100..160 clears both kBack and a 4-letter size-3 title.
+inline constexpr Rect kShopTo{ GAME_W - 140, 12, 60, 30 };
+inline void draw_shop_to() { kShopTo.button("Shop", rgb565(74, 92, 132), col::white); }
+
 // A drag-scrollable vertical list of uniform rows, for content whose length isn't known at
 // design time (conversation history, a growing minigame roster, a creature list). Same
 // immediate-mode spirit as Rect -- the list owns only a scroll offset and drag bookkeeping;
