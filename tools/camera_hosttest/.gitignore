@@ -1,0 +1,3 @@
+# Host-test build products; see harness.cpp for the build command.
+*.exe
+*.o
