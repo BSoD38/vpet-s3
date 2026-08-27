@@ -97,10 +97,20 @@ inline void draw_shop_to() { kShopTo.button("Shop", rgb565(74, 92, 132), col::wh
 //             list.endClip(); list.drawScrollbar(count);
 //             if (int t = list.tapped(); t >= 0) { ... }
 // On scene entry: list.reset() (clears scroll AND any still-coasting flick).
+//
+// GIVE IT THE FULL HEIGHT DOWN TO GAME_H. A viewport that stops a few px short of the screen
+// edge shows its own clip line: a half-drawn row cut off with a bare strip of panel beneath
+// it, which reads as a container that failed to reach the bottom. Let the rows run off the
+// edge instead and use padB (below) for the gutter.
 struct ListView {
     // Layout, refreshed each frame by the scene.
     int   x = 0, y = 0, w = GAME_W, h = 100;
     int   rowH = 40;
+    // Dead space at the BOTTOM of every row -- the gutter a scene leaves between its cards
+    // (a 46px row holding a 40px card has padB = 6). Trimmed off the last row, so scrolling
+    // to the end puts the last CARD's edge on the viewport's edge instead of stopping one
+    // gutter short of it. 0 for rows that fill their own height.
+    int   padB = 0;
 
     // Persistent state.
     float scroll = 0;          // px scrolled down from the top
@@ -109,8 +119,8 @@ struct ListView {
     static constexpr int   DRAG_SLOP = 6;      // px before a press becomes a scroll gesture
     static constexpr float FRICTION  = 9.0f;   // flick decay (higher = stops sooner)
 
-    void geom(int x_, int y_, int w_, int h_, int rowH_) {
-        x = x_; y = y_; w = w_; h = h_; rowH = rowH_;
+    void geom(int x_, int y_, int w_, int h_, int rowH_, int padB_ = 0) {
+        x = x_; y = y_; w = w_; h = h_; rowH = rowH_; padB = padB_;
     }
 
     // Scene entry / tab switch: back to the top with ALL transient input state cleared.
@@ -123,8 +133,14 @@ struct ListView {
         lastUs_ = 0;
     }
 
+    // Scrollable content height: every row, less the last one's gutter (see padB).
+    int contentH(int count) const {
+        int c = count * rowH - padB;
+        return c > 0 ? c : 0;
+    }
+
     float maxScroll(int count) const {
-        float m = (float)(count * rowH - h);
+        float m = (float)(contentH(count) - h);
         return m > 0 ? m : 0;
     }
 
@@ -195,7 +211,7 @@ struct ListView {
     void drawScrollbar(int count, uint16_t c = col::dim, int barW = 3) const {
         const float m = maxScroll(count);
         if (m <= 0) return;
-        int trackH = h, knobH = (int)((float)h / (count * rowH) * trackH);
+        int trackH = h, knobH = (int)((float)h / contentH(count) * trackH);
         if (knobH < 12) knobH = 12;
         int knobY = y + (int)((scroll / m) * (trackH - knobH));
         fb.fillRoundRect(x + w - barW - 1, knobY, barW, knobH, barW / 2, c);

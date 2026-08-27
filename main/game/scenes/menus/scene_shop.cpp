@@ -21,8 +21,11 @@ static const int ROW_H  = 46;
 static const int HEAD_H       = 28;
 static const int HEAD_H_FIRST = 14;
 static const int HEAD_TEXT_UP = 14;   // text sits this far above the row's bottom edge
-static const int LIST_Y = TAB_Y + TAB_H + 8, LIST_B = 6;
-static const int VIEW_H = GAME_H - LIST_Y - LIST_B;
+static const int CARD_G = 6;                     // gutter below each card, inside its row
+static const int LIST_Y = TAB_Y + TAB_H + 8;
+// Full height to the panel's bottom edge; CARD_G goes to ListView::padB. See scene_feed.cpp.
+// (This list is driven in pixels -- see rowH() in the header -- so padB is px either way.)
+static const int VIEW_H = GAME_H - LIST_Y;
 static const int PAD_X  = 12;
 static const int SWATCH_R = 13;
 static const float FLASH_SECS = 0.9f;
@@ -116,7 +119,7 @@ static Line row_line(App& app, const SceneShop::Row& r);
 
 void SceneShop::onEnter()
 {
-    list_.geom(0, LIST_Y, GAME_W, VIEW_H, 1);   // 1px 'rows': see rowH() in the header
+    list_.geom(0, LIST_Y, GAME_W, VIEW_H, 1, CARD_G);   // 1px 'rows': see rowH() in the header
     list_.reset();
     flash_ = 0.0f;
     closeDetail();
@@ -274,11 +277,11 @@ void SceneShop::drawStockRow(int i, const Rect& row)
     Line l = line_of(app(), rows_[i].isFood, rows_[i].idx);
     const bool afford = app().economy.canAfford(l.cost);
 
-    Rect card{ PAD_X, row.y, GAME_W - 2 * PAD_X, ROW_H - 6 };
+    Rect card{ PAD_X, row.y, GAME_W - 2 * PAD_X, ROW_H - CARD_G };
     card.fill(col::card, 8);
     card.outline(col::dim, 8);
 
-    int cy = row.y + (ROW_H - 6) / 2;
+    int cy = row.y + (ROW_H - CARD_G) / 2;
     fb.fillCircle(PAD_X + 8 + SWATCH_R, cy, SWATCH_R, l.color);
     fb.drawCircle(PAD_X + 8 + SWATCH_R, cy, SWATCH_R, col::black);
 
@@ -308,11 +311,11 @@ void SceneShop::drawBagRow(int i, const Rect& row)
     const InvSlot& s = app().economy.slotAt(rows_[i].idx);
     Line l = resolve_id(app(), s.id, s.kind);
 
-    Rect card{ PAD_X, row.y, GAME_W - 2 * PAD_X, ROW_H - 6 };
+    Rect card{ PAD_X, row.y, GAME_W - 2 * PAD_X, ROW_H - CARD_G };
     card.fill(col::card, 8);
     card.outline(col::dim, 8);
 
-    int cy = row.y + (ROW_H - 6) / 2;
+    int cy = row.y + (ROW_H - CARD_G) / 2;
     fb.fillCircle(PAD_X + 8 + SWATCH_R, cy, SWATCH_R, l.color);
     fb.drawCircle(PAD_X + 8 + SWATCH_R, cy, SWATCH_R, col::black);
 

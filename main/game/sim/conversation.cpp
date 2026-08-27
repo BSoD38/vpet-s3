@@ -141,6 +141,9 @@ static const char* K_JRNH   = "cjrnlh";    // (count << 16) | head
 // survives a reboot: a RAM-only cooldown made "reboot the device" a fresh offer ~3 s after
 // boot -- a grind loop for repeatable conversations.
 static const char* K_NEXT   = "cvnext";
+// Hash of the last conversation played through. Persisted for the same reason as K_NEXT: a
+// reboot must not hand back the line the pet just finished saying.
+static const char*    K_LAST   = "cvlast";
 
 void ConversationSystem::loadMemory()
 {
@@ -298,7 +301,9 @@ void ConversationSystem::clearSeen()
     jrnHead_  = 0;
     memset(jrn_, 0, sizeof jrn_);
     dirty_ = true;                 // everything one-shot is eligible again
+    lastPlayed_ = 0;               // a new creature is not gagged by its predecessor's last line
     saveMemory();
+    save_->storeU32(K_LAST, 0);
     ESP_LOGI(TAG, "history + journal cleared (new creature); facts kept (they're about the PLAYER)");
 }
 
@@ -322,6 +327,8 @@ void ConversationSystem::init(SaveStore& save)
 
     gamedata_mount();
     loadMemory();
+
+    lastPlayed_ = save_->loadU32(K_LAST, 0);   // no repeat across a reboot either
 
     // Resume the persisted cooldown so a reboot can't be used to skip the gap between
     // conversations (repeatable ones would otherwise be farmable by power-cycling).
@@ -750,6 +757,20 @@ void ConversationSystem::considerEntry(void* itemPtr, const char* path, int entr
     gd_str(item, "id", id, sizeof id, "");
     if (!id[0]) return;                 // unusable without an id (it keys seen/journal)
 
+    // Never say the same thing twice running. Ambient eligibility is often narrow -- the hour
+    // window on a late-night line can leave it as the ONLY candidate, and the weighted roll in
+    // choose() then re-picks it every cooldown until the hour rolls over. Excluded HERE rather
+    // than at the bubble so a different conversation gets the slot when one exists; when the
+    // repeat really is the only thing eligible, the pet just stays quiet.
+    //
+    // Triggered searches are exempt: a deathbed farewell is authored to be the right line for
+    // the moment, and staying silent there because it was also the last thing said is worse
+    // than the repeat.
+    if (!pickBest_ && lastPlayed_ && fnv1a(id) == lastPlayed_) {
+        ESP_LOGD(TAG, "skipping '%s': just played", id);
+        return;
+    }
+
     bool unseen = false;
     int16_t prio = 0;
     if (!gatePasses(item, ctx, &unseen, &prio, id)) return;
@@ -833,6 +854,11 @@ bool ConversationSystem::triggeredStep(const char* trigger, const ConvContext& c
 
 void ConversationSystem::dismiss()
 {
+    // A declined ONE-SHOT is deliberately re-offered (see dirty_ below) -- you may simply not
+    // have been ready to answer it. Declined CHATTER is not: re-offering the line you just
+    // backed out of is the same spam finish() guards against, one dismiss at a time.
+    if (act_->id[0] && act_->repeatable) lastPlayed_ = fnv1a(act_->id);
+
     pending_  = false;
     cooldown_ = roll_cooldown(lastFriendship_);
     persistCooldown();   // flushes any facts set before the player bailed out, too
@@ -843,13 +869,17 @@ void ConversationSystem::dismiss()
 void ConversationSystem::persistCooldown()
 {
     flushMemory();
+    save_->beginBatch();                 // one commit for both
     save_->storeU32(K_NEXT, clock_now() + (uint32_t)cooldown_);
+    save_->storeU32(K_LAST, lastPlayed_);
+    save_->endBatch();
 }
 
 void ConversationSystem::finish()
 {
     if (act_->id[0]) {
         const bool firstTime = !isSeen(act_->id);
+        lastPlayed_ = fnv1a(act_->id);       // the next ambient scan will not offer it again
         markSeen(act_->id);                  // gating
         // Journal only the FIRST completion: a repeatable conversation replayed a few times
         // a day would otherwise fill the 32-slot ring with duplicates and silently evict

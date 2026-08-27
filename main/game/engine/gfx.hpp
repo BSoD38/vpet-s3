@@ -1,6 +1,7 @@
 #pragma once
 #include <cstdint>
 #include "display.hpp"   // LGFX, display, LGFX_Sprite
+#include "camera.hpp"    // Camera2D (pure math; used by the *_world draw variants below)
 
 // Logical game resolution (matches the panel, portrait).
 static constexpr int GAME_W = 240;
@@ -93,3 +94,28 @@ void gfx_blit_sprite_fit_bottom(LGFX_Sprite* s, int cx, int bottomY, int maxW, i
 void gfx_invalidate_scaled(const void* src);           // drop cached scaled copies of src; call BEFORE freeing src
 void gfx_tile_region(int x, int y, int w, int h, const uint16_t* tile,   // fill a rect by repeating an opaque
                      int tw, int th, int scrollX = 0);                   // tile; scrollX shifts it left (scrolling ground)
+
+// --- Camera-aware world drawing -----------------------------------------------------------
+// Variants of the primitives above that take WORLD coordinates and a Camera2D (camera.hpp).
+// All of them share one skeleton: CULL against the camera's visible rect (an off-screen
+// draw is skipped entirely, not clipped), fall through to the exact pre-camera code path
+// when the camera is at identity() (so an idle camera renders pixel-identically and costs
+// one comparison), and otherwise project through the camera's single rounding policy.
+// Zoomed sprites go through LovyanGFX's nearest-neighbour rotate-zoom -- deliberately no
+// anti-aliasing (crisp pixel art, and no per-frame resample cost), and deliberately NOT the
+// scaled-copy LRU cache above, whose integer-box keys a continuous zoom would thrash.
+// Distinct names rather than overloads, so camera-aware call sites stay greppable.
+void gfx_fill_rect_world(const Camera2D& c, float x, float y, float w, float h, uint16_t col);
+void gfx_fill_circle_world(const Camera2D& c, float cx, float cy, float r, uint16_t col);
+void gfx_draw_circle_world(const Camera2D& c, float cx, float cy, float r, uint16_t col);
+void gfx_fill_arc_world(const Camera2D& c, float cx, float cy, float r0, float r1,
+                        int a0, int a1, uint16_t col);
+void gfx_fill_triangle_world(const Camera2D& c, float x0, float y0, float x1, float y1,
+                             float x2, float y2, uint16_t col);
+void gfx_blit_world(const Camera2D& c, const Sprite& s, float wcx, float wcy);   // centered
+void gfx_blit_sprite_world(const Camera2D& c, LGFX_Sprite* s, float wcx, float wcy,
+                           uint16_t transp, bool mirror = false);                // centered
+void gfx_blit_sprite_bottom_world(const Camera2D& c, LGFX_Sprite* s, float wcx, float wBottom,
+                                  uint16_t transp, bool mirror = false);         // feet-anchored
+void gfx_tile_region_world(const Camera2D& c, float x, float y, float w, float h,
+                           const uint16_t* tile, int tw, int th);

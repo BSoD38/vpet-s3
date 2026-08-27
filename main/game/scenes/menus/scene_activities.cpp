@@ -29,9 +29,12 @@ static const int ACT_N = (int)(sizeof(ACTS) / sizeof(ACTS[0]));
 // layout: cards are inset inside full-width list rows; the row's spare CARD_G is the gap.
 static const int CARD_X = 20, CARD_W = 200, CARD_H = 42, CARD_G = 8;
 static const int ROW_H  = CARD_H + CARD_G;
-static const int LIST_Y = 64, LIST_B = 8;                  // viewport top / bottom margin
+static const int LIST_Y = 64;                              // viewport top
+// Down to the panel's bottom edge, with CARD_G handed to ListView::padB: a viewport that
+// stopped short of GAME_H showed its own clip line, and the last card stopped a gutter above
+// the screen edge on top of that. See scene_feed.cpp.
 // NB: not LIST_H -- that name is an include guard in one of the vendor driver headers.
-static const int VIEW_H = GAME_H - LIST_Y - LIST_B;
+static const int VIEW_H = GAME_H - LIST_Y;
 
 static bool act_available(const Activity& a, const Pet& pet)
 {
@@ -40,7 +43,7 @@ static bool act_available(const Activity& a, const Pet& pet)
 
 void SceneActivities::onEnter()
 {
-    list_.geom(0, LIST_Y, GAME_W, VIEW_H, ROW_H);
+    list_.geom(0, LIST_Y, GAME_W, VIEW_H, ROW_H, CARD_G);
     list_.reset();                                          // top of the list, no leftover flick
 }
 

@@ -530,3 +530,154 @@ void gfx_tile_region(int x, int y, int w, int h, const uint16_t* tile, int tw, i
             fb.pushImage(tx, ty, tw, th, tile);
     fb.clearClipRect();
 }
+
+// --- Camera-aware world drawing (see gfx.hpp for the shared skeleton) ---------------------
+//
+// Rects and circles need no identity() special case: Camera2D::projectRect and the rounded
+// center/radius reproduce the plain calls exactly at identity, so only the paths where the
+// DRAW MECHANISM changes (sprites: pushSprite vs pushRotateZoom; tiles: pushImage vs
+// per-tile rotate-zoom) branch on it -- there the fallback also guarantees pixel parity.
+
+void gfx_fill_rect_world(const Camera2D& c, float x, float y, float w, float h, uint16_t col)
+{
+    if (!c.visible(x, y, w, h)) return;
+    int X, Y, W, H;
+    c.projectRect(x, y, w, h, X, Y, W, H);
+    fb.fillRect(X, Y, W, H, col);
+}
+
+void gfx_fill_circle_world(const Camera2D& c, float cx, float cy, float r, uint16_t col)
+{
+    if (!c.visible(cx - r, cy - r, r * 2, r * 2)) return;
+    int R = (int)lroundf(c.scale(r));
+    fb.fillCircle((int)lroundf(c.sx(cx)), (int)lroundf(c.sy(cy)), R < 1 ? 1 : R, col);
+}
+
+void gfx_draw_circle_world(const Camera2D& c, float cx, float cy, float r, uint16_t col)
+{
+    if (!c.visible(cx - r, cy - r, r * 2, r * 2)) return;
+    int R = (int)lroundf(c.scale(r));
+    fb.drawCircle((int)lroundf(c.sx(cx)), (int)lroundf(c.sy(cy)), R < 1 ? 1 : R, col);
+}
+
+void gfx_fill_arc_world(const Camera2D& c, float cx, float cy, float r0, float r1,
+                        int a0, int a1, uint16_t col)
+{
+    float r = r0 > r1 ? r0 : r1;
+    if (!c.visible(cx - r, cy - r, r * 2, r * 2)) return;
+    fb.fillArc((int)lroundf(c.sx(cx)), (int)lroundf(c.sy(cy)),
+               (int)lroundf(c.scale(r0)), (int)lroundf(c.scale(r1)), a0, a1, col);
+}
+
+void gfx_fill_triangle_world(const Camera2D& c, float x0, float y0, float x1, float y1,
+                             float x2, float y2, uint16_t col)
+{
+    float minX = fminf(x0, fminf(x1, x2)), maxX = fmaxf(x0, fmaxf(x1, x2));
+    float minY = fminf(y0, fminf(y1, y2)), maxY = fmaxf(y0, fmaxf(y1, y2));
+    if (!c.visible(minX, minY, maxX - minX, maxY - minY)) return;
+    fb.fillTriangle((int)lroundf(c.sx(x0)), (int)lroundf(c.sy(y0)),
+                    (int)lroundf(c.sx(x1)), (int)lroundf(c.sy(y1)),
+                    (int)lroundf(c.sx(x2)), (int)lroundf(c.sy(y2)), col);
+}
+
+void gfx_blit_world(const Camera2D& c, const Sprite& s, float wcx, float wcy)
+{
+    if (!c.visible(wcx - s.w * 0.5f, wcy - s.h * 0.5f, s.w, s.h)) return;
+    if (c.identity()) { gfx_blit(s, (int)lroundf(wcx), (int)lroundf(wcy)); return; }
+    float z = c.zoom();
+    fb.pushImageRotateZoom(c.sx(wcx), c.sy(wcy), (s.w - 1) * 0.5f, (s.h - 1) * 0.5f,
+                           0.0f, z, z, s.w, s.h, s.data, s.transp);
+}
+
+// Zoomed sprite: the same pivot-center rotate-zoom trick push_mirrored uses, with the zoom
+// factors doing double duty -- magnitude is the camera zoom, the x sign is the mirror. The
+// pivot maps to the projected world CENTER, and since the rendered extent is zoom*size
+// centered there, the sprite's world-space bottom lands exactly on the projected baseline.
+static void push_world(LGFX_Sprite* s, const Camera2D& c, float wcx, float wcy,
+                       uint16_t transp, bool mirror)
+{
+    float z = c.zoom();
+    s->setPivot((s->width() - 1) * 0.5f, (s->height() - 1) * 0.5f);
+    s->pushRotateZoom(&fb, c.sx(wcx), c.sy(wcy), 0.0f, mirror ? -z : z, z, transp);
+}
+
+void gfx_blit_sprite_world(const Camera2D& c, LGFX_Sprite* s, float wcx, float wcy,
+                           uint16_t transp, bool mirror)
+{
+    if (!s) return;
+    float w = (float)s->width(), h = (float)s->height();
+    if (!c.visible(wcx - w * 0.5f, wcy - h * 0.5f, w, h)) return;
+    if (c.identity()) { gfx_blit_sprite(s, (int)lroundf(wcx), (int)lroundf(wcy), transp, mirror); return; }
+    push_world(s, c, wcx, wcy, transp, mirror);
+}
+
+void gfx_blit_sprite_bottom_world(const Camera2D& c, LGFX_Sprite* s, float wcx, float wBottom,
+                                  uint16_t transp, bool mirror)
+{
+    if (!s) return;
+    float w = (float)s->width(), h = (float)s->height();
+    if (!c.visible(wcx - w * 0.5f, wBottom - h, w, h)) return;
+    if (c.identity()) { gfx_blit_sprite_bottom(s, (int)lroundf(wcx), (int)lroundf(wBottom), transp, mirror); return; }
+    push_world(s, c, wcx, wBottom - h * 0.5f, transp, mirror);
+}
+
+// Overscale applied to every zoomed tile, in destination pixels. Each tile is rendered
+// into its corner-snapped rect; the rasterizer samples pixel CENTERS, so a rect covering
+// [X0, X1) owns exactly the pixel columns X0..X1-1, and a hair of overscale (spread half
+// to each side, so +-0.25px) guarantees those edge columns are inside the rendered extent
+// despite float rounding -- while staying too small to ever reach a neighbour's first
+// column. No per-tile clipping needed; seams and double-draws are both impossible.
+static const float TILE_SNAP_PAD = 0.51f;
+
+void gfx_tile_region_world(const Camera2D& c, float x, float y, float w, float h,
+                           const uint16_t* tile, int tw, int th)
+{
+    // floorf, not a truncating cast: the zoomed path below floors every edge (via
+    // projectRect and the per-tile snap), and the two paths have to agree on a negative
+    // or fractional coordinate or the region would shift a pixel the instant a pinch starts.
+    if (c.identity()) {
+        int IX = (int)floorf(x), IY = (int)floorf(y);
+        gfx_tile_region(IX, IY, (int)floorf(x + w) - IX, (int)floorf(y + h) - IY, tile, tw, th);
+        return;
+    }
+    if (!c.visible(x, y, w, h)) return;
+
+    // Clip to the projected region rect: edge tiles overrun it (same as the plain path),
+    // and the last row/column of a region that isn't a tile multiple must crop.
+    int RX, RY, RW, RH;
+    c.projectRect(x, y, w, h, RX, RY, RW, RH);
+    fb.setClipRect(RX, RY, RW, RH);
+
+    // Walk ONLY the tiles overlapping the visible part of the region -- this is the tile
+    // path's culling: at 4x zoom, three quarters of the ground never enters the loop.
+    float wxB = x + w, wyB = y + h;
+    if (c.visX() + c.visW() < wxB) wxB = c.visX() + c.visW();
+    if (c.visY() + c.visH() < wyB) wyB = c.visY() + c.visH();
+    float wxA = x > c.visX() ? x : c.visX();
+    float wyA = y > c.visY() ? y : c.visY();
+    int i0 = (int)floorf((wxA - x) / (float)tw);
+    int j0 = (int)floorf((wyA - y) / (float)th);
+
+    const float pivX = (tw - 1) * 0.5f, pivY = (th - 1) * 0.5f;
+    for (int j = j0; y + j * (float)th < wyB; j++) {
+        float wy0 = y + j * (float)th;
+        int Y0 = (int)floorf(c.sy(wy0));
+        int Hd = (int)floorf(c.sy(wy0 + th)) - Y0;
+        if (Hd <= 0) continue;
+        for (int i = i0; x + i * (float)tw < wxB; i++) {
+            float wx0 = x + i * (float)tw;
+            int X0 = (int)floorf(c.sx(wx0));
+            int Wd = (int)floorf(c.sx(wx0 + tw)) - X0;
+            if (Wd <= 0) continue;
+            // Scale each tile to exactly its own snapped rect: neighbours share edges by
+            // construction (both floor the same world coordinate), so per-tile scales that
+            // differ in the third decimal cannot open a seam between them.
+            fb.pushImageRotateZoom(X0 + (Wd - 1) * 0.5f, Y0 + (Hd - 1) * 0.5f,
+                                   pivX, pivY, 0.0f,
+                                   (Wd + TILE_SNAP_PAD) / (float)tw,
+                                   (Hd + TILE_SNAP_PAD) / (float)th,
+                                   tw, th, tile);
+        }
+    }
+    fb.clearClipRect();
+}

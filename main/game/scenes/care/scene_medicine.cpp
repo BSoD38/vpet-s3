@@ -9,14 +9,16 @@
 
 // layout
 static const int ROW_H  = 46;
-static const int LIST_Y = 76, LIST_B = 6;
-static const int VIEW_H = GAME_H - LIST_Y - LIST_B;
+static const int CARD_G = 6;                     // gutter below each card, inside its row
+static const int LIST_Y = 76;
+// Full height to the panel's bottom edge; the gutter is ListView::padB. See scene_feed.cpp.
+static const int VIEW_H = GAME_H - LIST_Y;
 static const int PAD_X  = 12;
 static const int SWATCH_R = 13;
 
 void SceneMedicine::onEnter()
 {
-    list_.geom(0, LIST_Y, GAME_W, VIEW_H, ROW_H);
+    list_.geom(0, LIST_Y, GAME_W, VIEW_H, ROW_H, CARD_G);
     list_.reset();
     build();
 }
@@ -73,11 +75,11 @@ void SceneMedicine::render()
         const Item& it = app().items.at(app().items.indexOf(s.id));
         Rect row = list_.rowRect(i);
 
-        Rect card{ PAD_X, row.y, GAME_W - 2 * PAD_X, ROW_H - 6 };
+        Rect card{ PAD_X, row.y, GAME_W - 2 * PAD_X, ROW_H - CARD_G };
         card.fill(col::card, 8);
         card.outline(col::dim, 8);
 
-        int cy = row.y + (ROW_H - 6) / 2;
+        int cy = row.y + (ROW_H - CARD_G) / 2;
         fb.fillCircle(PAD_X + 8 + SWATCH_R, cy, SWATCH_R, it.color);
         fb.drawCircle(PAD_X + 8 + SWATCH_R, cy, SWATCH_R, col::black);
 

@@ -8,14 +8,18 @@
 
 // layout
 static const int ROW_H  = 46;
-static const int LIST_Y = 64, LIST_B = 6;
-static const int VIEW_H = GAME_H - LIST_Y - LIST_B;   // not LIST_H: that name is a vendor include guard
+static const int CARD_G = 6;                          // gutter below each card, inside its row
+static const int LIST_Y = 64;
+// Runs to the very bottom of the panel: a viewport that stopped short showed its clip line as
+// a strip of bare panel under a half-drawn card. CARD_G goes to ListView::padB instead, so the
+// last card ends ON the screen edge rather than a gutter above it.
+static const int VIEW_H = GAME_H - LIST_Y;            // not LIST_H: that name is a vendor include guard
 static const int PAD_X  = 12;
 static const int SWATCH_R = 13;
 
 void SceneFeed::onEnter()
 {
-    list_.geom(0, LIST_Y, GAME_W, VIEW_H, ROW_H);
+    list_.geom(0, LIST_Y, GAME_W, VIEW_H, ROW_H, CARD_G);
     list_.reset();                                     // top of the list, no leftover flick
 }
 
@@ -43,11 +47,11 @@ void SceneFeed::render()
         const Food& f = foods.at(i);
         Rect row = list_.rowRect(i);
 
-        Rect card{ PAD_X, row.y, GAME_W - 2 * PAD_X, ROW_H - 6 };
+        Rect card{ PAD_X, row.y, GAME_W - 2 * PAD_X, ROW_H - CARD_G };
         card.fill(col::card, 8);
         card.outline(col::dim, 8);
 
-        int cy = row.y + (ROW_H - 6) / 2;
+        int cy = row.y + (ROW_H - CARD_G) / 2;
         fb.fillCircle(PAD_X + 8 + SWATCH_R, cy, SWATCH_R, f.color);
         fb.drawCircle(PAD_X + 8 + SWATCH_R, cy, SWATCH_R, col::black);
 

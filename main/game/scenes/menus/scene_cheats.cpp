@@ -14,6 +14,12 @@
 // addressed by ROWS[] below; taps resolve to a row via the ListView and to a zone within
 // it via the release x, so nothing here owns a screen-absolute rectangle any more.
 static const int LIST_Y = 48, ROW_H = 34;
+static const int ROW_G  = 3;                          // gutter below each row's button
+
+// Both lists run to the panel's bottom edge, with the row gutter handed to ListView::padB:
+// a viewport that stopped short of GAME_H showed its own clip line as a strip of bare panel
+// under a half-drawn row. See scene_feed.cpp.
+static const int LIST_H_MAIN = GAME_H - LIST_Y;
 
 // x-zones within a row: split rows break at the middle; stat rows put steppers at the
 // right edge (same places the old fixed layout kept them, so muscle memory survives).
@@ -23,6 +29,8 @@ static const int MINUS_X0 = 140, PLUS_X0 = 188;       // [-] then [+] to the row
 // picker: single-line rows, so a 200-slot modded roster is a couple of flicks tall
 static const int PICK_Y     = 52;
 static const int PICK_ROW_H = 36;
+static const int PICK_G     = 2;                      // gutter below each picker card
+static const int PICK_H     = GAME_H - PICK_Y;
 
 // How long a force-evolve result stays on the button.
 static const float EVO_MSG_SECS = 2.5f;
@@ -133,7 +141,7 @@ void SceneCheats::onEnter()
 {
     picking_ = false;   // never re-enter the scene with the picker still open
     evoMsgT_ = 0.0f;    // a stale result from the last visit would be answering nothing
-    main_.geom(0, LIST_Y, GAME_W, GAME_H - LIST_Y - 6, ROW_H);
+    main_.geom(0, LIST_Y, GAME_W, LIST_H_MAIN, ROW_H, ROW_G);
     main_.reset();
 }
 
@@ -282,7 +290,7 @@ void SceneCheats::renderPicker()
         const Creature& c = reg.at(order_[i]);
         const bool isCur  = order_[i] == cur;
         Rect row  = list_.rowRect(i);
-        Rect card { 12, row.y + 2, GAME_W - 24, PICK_ROW_H - 4 };
+        Rect card { 12, row.y + PICK_G, GAME_W - 24, PICK_ROW_H - 2 * PICK_G };
         card.fill(col::card);
         card.outline(isCur ? col::accent : col::dim);
 
@@ -463,7 +471,7 @@ void SceneCheats::onInput(const Input& in)
             for (int i = 0; i < n; i++)
                 if (order_[i] == pet.creatureIndex()) { pos = i; break; }
 
-            list_.geom(0, PICK_Y, GAME_W, GAME_H - PICK_Y - 6, PICK_ROW_H);
+            list_.geom(0, PICK_Y, GAME_W, PICK_H, PICK_ROW_H, PICK_G);
             list_.reset();
             float want = (float)(pos * PICK_ROW_H) - (float)(list_.h - PICK_ROW_H) / 2;
             float m    = list_.maxScroll(n);

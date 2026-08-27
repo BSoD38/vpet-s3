@@ -9,8 +9,8 @@
 static const int PAD_X  = 12;
 static const int ROW_H  = 44;
 static const int LIST_Y = 52;
-static const int HINT_H = 18;                              // fixed strip for the lock hint
-static const int VIEW_H = GAME_H - LIST_Y - HINT_H - 6;
+static const int HINT_H = 18;                              // strip for the lock hint, when there is one
+static const int BTN_T  = 4, BTN_B = 6;                    // button inset inside its row
 static const int BTN_W  = GAME_W - 2 * PAD_X - 10;         // 10px kept clear for the scrollbar
 
 // One row per entry -- label, destination and gating travel together, so inserting an entry
@@ -48,9 +48,24 @@ static const char* gate_hint(const Pet& pet)
 }
 static bool gate_closed(const Pet& pet) { return gate_hint(pet) != nullptr; }
 
+// The list takes everything below the header, and gives the hint strip back ONLY while there
+// is a hint to put in it. Reserving it unconditionally left a permanently empty band beneath a
+// half-clipped button -- on most saves, since the hint only shows while the creature is young,
+// unwell or frozen. Growing the viewport moves no row (they are all measured from LIST_Y); it
+// only reveals more at the bottom, so the entries do not jump when the gate opens.
+static int view_h(const Pet& pet) { return GAME_H - LIST_Y - (gate_closed(pet) ? HINT_H : 0); }
+
+// Refreshed every frame, on BOTH sides: the gate can open or shut while the screen is up (the
+// sim keeps ticking), and a viewport that was hit-tested at one height and drawn at another
+// would clamp the scroll against the wrong bottom.
+void SceneMenu::layout()
+{
+    list_.geom(0, LIST_Y, GAME_W, view_h(app().pet), ROW_H, BTN_B);
+}
+
 void SceneMenu::onEnter()
 {
-    list_.geom(0, LIST_Y, GAME_W, VIEW_H, ROW_H);
+    layout();
     list_.reset();
 }
 
@@ -60,12 +75,13 @@ void SceneMenu::render()
     gfx_text(PAD_X + 18, 20, 2, col::accent, "Menu");
 
     const bool closed = gate_closed(app().pet);
+    layout();
 
     list_.beginClip();
     for (int i = list_.first(); i <= list_.last(OPT_N); i++) {
         Rect row = list_.rowRect(i);
         const bool locked = OPTS[i].gated && closed;
-        Rect{ PAD_X, row.y + 4, BTN_W, ROW_H - 10 }.button(
+        Rect{ PAD_X, row.y + BTN_T, BTN_W, ROW_H - BTN_T - BTN_B }.button(
             OPTS[i].label,
             locked ? rgb565(56, 60, 74) : col::accent,
             locked ? col::dim           : col::black);
@@ -94,6 +110,7 @@ void SceneMenu::onInput(const Input& in)
         return;
     }
 
+    layout();
     list_.update(in, OPT_N);
 
     const int row = list_.tapped();

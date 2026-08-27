@@ -9,13 +9,15 @@
 
 // layout
 static const int TAB_Y = 64, TAB_H = 28;
-static const int LIST_Y = 100, LIST_B = 8;
-static const int VIEW_H = GAME_H - LIST_Y - LIST_B;   // not LIST_H (vendor include guard)
+static const int LIST_Y = 100;
+// Full height to the panel's bottom edge; CARD_G goes to ListView::padB. See scene_feed.cpp.
+static const int VIEW_H = GAME_H - LIST_Y;            // not LIST_H (vendor include guard)
 static const int PAD_X  = 12;
 
 static const int ROW_MEM  = 30;   // one memory: title + when
 static const int ROW_FACT = 40;   // one fact: up to two wrapped lines
 static const int ROW_LIN  = 40;   // one predecessor: name/gen + lived/stage/bond
+static const int CARD_G   = 6;    // gutter below each card, inside its row (any page)
 
 static const char* const TABS[3] = { "Memories", "About You", "In Memory" };
 static const int TAB_N = 3;
@@ -38,7 +40,7 @@ static void ago_str(uint32_t when, char* out, int n)
 
 void SceneJournal::onEnter()
 {
-    list_.geom(0, LIST_Y, GAME_W, VIEW_H, row_h(tab_));
+    list_.geom(0, LIST_Y, GAME_W, VIEW_H, row_h(tab_), CARD_G);
     list_.reset();                             // top of the list, no leftover flick
 }
 
@@ -70,7 +72,7 @@ void SceneJournal::render()
     list_.beginClip();
     for (int i = list_.first(); i <= list_.last(n); i++) {
         Rect row = list_.rowRect(i);
-        Rect card{ PAD_X, row.y, GAME_W - 2 * PAD_X, row_h(tab_) - 6 };
+        Rect card{ PAD_X, row.y, GAME_W - 2 * PAD_X, row_h(tab_) - CARD_G };
         card.fill(col::card, 6);
 
         if (tab_ == 0) {
@@ -125,7 +127,7 @@ void SceneJournal::onInput(const Input& in)
         if (t >= 0 && t != tab_) {
             sfx::play(sfx::kTap);
             tab_ = t;
-            list_.geom(0, LIST_Y, GAME_W, VIEW_H, row_h(tab_));   // row height differs per page
+            list_.geom(0, LIST_Y, GAME_W, VIEW_H, row_h(tab_), CARD_G);   // row height differs per page
             list_.reset();
             return;
         }

@@ -236,6 +236,13 @@ private:
     bool     dirty_      = true;
     uint16_t lastFriendship_ = 0;   // latched from ctx; the next gap is rolled against it
 
+    // Hash of the last conversation the player actually played through (0 = none). The ambient
+    // scan refuses to offer it again, so the pet can never say the same thing twice running.
+    // It matters because eligibility is often narrow: late at night the hour gate can leave
+    // ONE candidate standing, and the weighted roll below then picks it every single time.
+    // Persisted next to the cooldown, or a reboot would hand back the line it just said.
+    uint32_t lastPlayed_ = 0;
+
     // Triggered-search state (see triggeredStep). wantTrigger_ doubles as the gate every
     // scan applies: ambient scans want "" (untriggered entries only), so a deathbed
     // farewell can never fire as small talk -- nor small talk at a deathbed.

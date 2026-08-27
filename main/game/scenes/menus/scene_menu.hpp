@@ -13,6 +13,10 @@
 class SceneMenu : public Scene {
     ListView list_;
 
+    // The viewport height depends on whether the lock hint is showing, so it is re-measured
+    // every frame from both render() and onInput(). See view_h() in the .cpp.
+    void layout();
+
 public:
     void onEnter() override;
     void render() override;
