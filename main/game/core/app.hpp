@@ -6,6 +6,7 @@
 #include "sim/foods.hpp"
 #include "sim/items.hpp"
 #include "sim/economy.hpp"
+#include "sim/room.hpp"
 #include "sim/personality.hpp"
 #include "sim/conversation.hpp"
 #include "sim/pet.hpp"
@@ -48,6 +49,7 @@ public:
     FoodRegistry     foods;              // data-driven food list (gamedata + SD), loaded in init()
     ItemRegistry     items;              // data-driven item list (toys/decor/medicine), loaded in init()
     Economy          economy;            // Bits + the bag; own NVS keys, survives death
+    Room             room;               // what is PUT OUT (toy now, decor at E5); survives death
     PersonalityRegistry personalities;   // data-driven natures + traits (gamedata + SD)
     PersonalityTracker  drift{save, personalities};   // emergent identity; fed by Pet's actions
     ConversationSystem  conversations;    // moddable dialogue: streaming selection, O(1) RAM
@@ -90,6 +92,11 @@ public:
     // The gate context the run loop feeds the conversation system, for scenes that drive
     // their own conversation search (SceneDeath's deathbed farewell).
     ConvContext convCtx();
+
+    // Point Pet at the out toy's drift vector (or clear it). Called after anything that can
+    // change which toy is out, and once at boot. Lives here because App is the only thing
+    // that can see the Room and the ItemRegistry at the same time -- Pet knows neither.
+    void refreshAmbientToy();
 
 private:
     bool  transitioning_ = false;   // a slide is in progress (input suppressed)

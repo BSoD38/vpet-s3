@@ -108,6 +108,11 @@ static const float DRIFT_SLEEP_NO[AX_COUNT] = {  0.20f, -0.30f,  0.00f,  1.00f }
 // neglect is about the player's absence, and at 60x gameSpeed a sim-time period would fire
 // every 30 REAL seconds and numerically swamp every deliberate action's drift.
 static const float IDLE_PERIOD = 1800.0f;   // real seconds between idle nudges
+// A toy left out shapes the creature slowly on its own. Deliberately weaker and rarer than
+// an idle nudge: the toy is a standing choice rather than an action, and it must never
+// out-argue the things the player actively does.
+static const float TOY_PERIOD   = 2700.0f;  // real seconds between ambient toy nudges
+static const float TOY_STRENGTH = 0.35f;    // ...at this fraction of a deliberate one
 
 // Offline catch-up replays absence as neglect too -- but attenuated and capped. A single
 // >=24h replay into the EMA would otherwise converge the whole vector toward the idle
@@ -115,6 +120,9 @@ static const float IDLE_PERIOD = 1800.0f;   // real seconds between idle nudges
 // weeks of deliberate play. Half strength (passive absence, like the auto-sleep nudge) and
 // at most this many nudges per catch-up keep absence a signal instead of a verdict.
 static const int   CATCHUP_IDLE_MAX      = 6;
+// A week in a drawer must not deliver a week of toy drift, for the same reason it does not
+// deliver a week of neglect: the offline replay is a catch-up, not a fast-forward.
+static const int   CATCHUP_TOY_MAX       = 4;
 static const float CATCHUP_IDLE_STRENGTH = 0.5f;
 
 // Out-of-blob NVS keys. Anything stored here instead of in PetState avoids changing the
@@ -638,6 +646,24 @@ void Pet::tick(float dt)   // dt is SIM seconds (the caller has applied gameSpee
             }
         }
     }
+    // Ambient toy drift. Deliberately NOT through nudgeDrift(): that resets idleSecs_ to mark
+    // a deliberate interaction, so routing this through it would mean a toy left on the floor
+    // permanently suppressed the neglect clock -- leaving one out would silently cancel the
+    // consequence of ignoring the creature. Asleep counts for nothing either; a sleeping
+    // creature is not playing with anything.
+    if (toyDrift_ && drift_ && !s_.lightsOff) {
+        toySecs_ += catchingUp_ ? dt : dt / (float)(s_.gameSpeed ? s_.gameSpeed : 1);
+        if (toySecs_ >= TOY_PERIOD) {
+            toySecs_ = 0.0f;
+            if (!catchingUp_) {
+                drift_->nudge(toyDrift_, TOY_STRENGTH);
+            } else if (cuToyNudges_ < CATCHUP_TOY_MAX) {
+                cuToyNudges_++;
+                drift_->nudge(toyDrift_, TOY_STRENGTH * CATCHUP_IDLE_STRENGTH);
+            }
+        }
+    }
+
     if (drift_) drift_->tick(dt, s_.stage);
 }
 
@@ -797,6 +823,7 @@ void Pet::boot()
         uint32_t rem = elapsed;   // catch up in REAL seconds (speed multiplier is live-only)
         catchingUp_   = true;     // idle drift replays attenuated + capped (see tick())
         cuIdleNudges_ = 0;
+        cuToyNudges_  = 0;
         while (rem > 0) { uint32_t step = rem > 60 ? 60 : rem; tick((float)step); rem -= step; }
         catchingUp_ = false;
     } else {
@@ -975,6 +1002,19 @@ bool Pet::treat(uint8_t track, uint8_t potency, int health)
              (unsigned)track, (unsigned)potency, health, s_.health,
              conditionMarker() ? conditionMarker() : "OK");
     markSaved();
+    return true;
+}
+
+bool Pet::playWithToy(const float d[AX_COUNT], int happiness)
+{
+    // The same gate as play(): an egg, a sleeping, ill or upset creature is not playing.
+    if (careBlocked()) return false;
+    if (s_.stage == STAGE_EGG || touchBlocked() || s_.lightsOff) return false;
+    if (isUpset()) { refused_ = true; sfx::play(sfx::kRefuse); return false; }
+
+    s_.happiness = clampf(s_.happiness + (float)happiness, 0, 100);
+    sfx::play(sfx::kPet, 0.8f);
+    nudgeDrift(d);                 // deliberate: full strength, and it breaks the idle streak
     return true;
 }
 

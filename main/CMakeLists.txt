@@ -35,6 +35,7 @@ idf_component_register(
                               "./game/sim/foods.cpp"
                               "./game/sim/items.cpp"
                               "./game/sim/economy.cpp"
+                              "./game/sim/room.cpp"
                               "./game/sim/personality.cpp"
                               "./game/sim/conversation.cpp"
                               "./game/sim/gamedata.cpp"

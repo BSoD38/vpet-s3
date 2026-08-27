@@ -1,5 +1,6 @@
 #include "scene_home.hpp"
 #include "core/app.hpp"
+#include "sim/items.hpp"       // Item (the toy that is out)
 #include "engine/gfx.hpp"
 #include "engine/util.hpp"      // clampf (shared)
 #include "ui/widgets.hpp"
@@ -27,6 +28,16 @@ static const int PET_HIT_MARGIN = 8;        // petting-zone slack around the spr
 // The creature is no longer pinned to the centre: it walks the ground between these insets
 // (measured to the sprite's EDGE, so wide creatures get the same clearance as narrow ones).
 static const int WALK_MARGIN = 6;
+
+// The toy sits on the ground at a fixed spot near the left edge, out of the walk lane's
+// middle so the creature does not permanently stand on top of it. World coordinates: it is
+// part of the ROOM, so it pans and zooms with the pinch camera like the grass does.
+static const float TOY_WX = 40.0f;
+static const int   TOY_R  = 13;
+static const float TOY_PLAY_TIME = 0.45f;
+// Footfall period while running a ball down, as a fraction of the walking one. Halving it
+// doubles both the leg speed and the ground speed, which is what "running" has to mean here.
+static const float BALL_RUN_MULT = 0.5f;
 
 // bottom action bar (quick care actions) + top-right menu button
 static const int   ACT_N  = 4;
@@ -91,6 +102,18 @@ static const float IDLE_POSE_TIME  = 1.1f;
 // the next autosave/care action, matching how play() defers happiness saves).
 static const int   FR_PET          = 2;       // per earned rub chunk
 static const int   FR_POKE         = 5;       // per completed poke run
+// Camera follow (docs/camera.md): per-second convergence of the view center onto the
+// creature (~90% of the way in 0.45 s) -- fast enough that a 4x zoom never loses the pet,
+// slow enough that its stops and turns read as a camera trailing it, not bolted to it.
+static const float CAM_FOLLOW_RATE = 5.0f;
+// Runtime debug overlay (Settings toggle): a black band of size-1 text under the HUD.
+// Its height and the floor it pushes the creature's cues down to are derived from ONE
+// line count. They used to be two hand-synced magic numbers, and adding a line to the
+// band without bumping the floor leaves the speech bubble painted UNDER it while its hit
+// rect keeps eating taps -- an invisible target that warps you into the conversation.
+static const int   DBG_Y     = 48;
+static const int   DBG_LINES = 5;
+static const int   DBG_H     = DBG_LINES * 12 + 2;   // 12px per row, +2 bottom padding
 
 static uint16_t bar_color(float v01)
 {
@@ -99,22 +122,26 @@ static uint16_t bar_color(float v01)
 
 
 // A small stacked "poop" with a dark outline so it reads against the brown ground.
-static void draw_poop(int x, int y)
+// World-space (drawn through the camera): a poop is a thing lying on the ground, so it
+// pans and scales with it. Int params on purpose -- the halved radii below must keep
+// their integer-division values so the identity camera renders it pixel-identically.
+static void draw_poop(const Camera2D& cam, int x, int y)
 {
     const uint16_t body = rgb565(74, 46, 20);
     const uint16_t edge = rgb565(30, 18, 8);
-    fb.fillCircle(x, y,      8, body);
-    fb.fillCircle(x, y - 7,  6, body);
-    fb.fillCircle(x, y - 13, 4, body);
-    fb.drawCircle(x, y,      8, edge);
-    fb.drawCircle(x, y - 7,  6, edge);
+    gfx_fill_circle_world(cam, x, y,      8, body);
+    gfx_fill_circle_world(cam, x, y - 7,  6, body);
+    gfx_fill_circle_world(cam, x, y - 13, 4, body);
+    gfx_draw_circle_world(cam, x, y,      8, edge);
+    gfx_draw_circle_world(cam, x, y - 7,  6, edge);
 }
 
-static void draw_heart(int x, int y, int s, uint16_t c)
+// World-space too: hearts hang around the creature's body, so they follow its zoom.
+static void draw_heart(const Camera2D& cam, int x, int y, int s, uint16_t c)
 {
-    fb.fillCircle(x - s / 2, y, s / 2, c);
-    fb.fillCircle(x + s / 2, y, s / 2, c);
-    fb.fillTriangle(x - s, y + s / 4, x + s, y + s / 4, x, y + s + s / 3, c);
+    gfx_fill_circle_world(cam, x - s / 2, y, s / 2, c);
+    gfx_fill_circle_world(cam, x + s / 2, y, s / 2, c);
+    gfx_fill_triangle_world(cam, x - s, y + s / 4, x + s, y + s / 4, x, y + s + s / 3, c);
 }
 
 // --- action-icon glyphs, drawn centered at (x,y) ---
@@ -185,11 +212,26 @@ static void icon_lights(int x, int y, bool asleep, uint16_t bg)  // moon (asleep
 
 void SceneHome::update(float dt)
 {
+    if (toyPlayT_ > 0.0f) toyPlayT_ -= dt;
     Pet& pet = app().pet;
     const PetState& p = pet.state();
 
     t_ += dt;
     if (pokeTarget_ == 0) pokeTarget_ = 3 + (int)(esp_random() % 4);   // this run needs 3..6 pokes
+
+    // Camera gesture FIRST: the frame a second finger lands, engaged() must already be
+    // true here -- to the single-finger tracking below a second finger looks like the
+    // touch point teleporting, which the rub accumulator would bank as petting distance.
+    // While it is engaged, any armed gesture is dropped and none may re-arm.
+    pinch_.update(in_, cam_);
+    // TWO FINGERS DOWN IS ENOUGH, engaged or not: the recognizer deliberately refuses to
+    // engage while the points are closer than MIN_PINCH_DIST, and in exactly that window
+    // (the start of every pinch-out, and the one-finger-plus-ghost case) tx_/ty_ still
+    // come from whichever contact the driver put in slot 0 -- so it can jump between the
+    // two. This is the same predicate onInput() gates taps on; the two must agree, or one
+    // half of the scene treats the touch as a pinch while the other half rubs the pet.
+    const bool pinching = pinch_.engaged() || in_.points >= 2;
+    if (pinching) { touchActive_ = false; ringHold_ = 0.0f; }
 
     // Petting zone tracks the creature's actual sprite size (feet-anchored baseline) and
     // FOLLOWS it along the ground -- otherwise you would be rubbing empty grass. Still no
@@ -202,13 +244,72 @@ void SceneHome::update(float dt)
     walk_.setSpan(WALK_MARGIN + psw / 2, GAME_W - WALK_MARGIN - psw / 2);
     int bodyCx = (int)walk_.x();
     int bodyCy = PET_FEET - psh / 2;
+    // The camera trails the creature's STABLE anchor -- walk x + baseline body center,
+    // deliberately without the footfall lift / poke hop / refusal wiggle, so those animate
+    // the pet within the frame instead of shaking the whole world with it. (walk_.x() is
+    // last frame's position here, same as the petting zone below: 0.4 px at walk speed,
+    // and the follow smoothing swallows far more than that.)
+    cam_.follow(walk_.x(), (float)bodyCy, dt, CAM_FOLLOW_RATE);
     int hzW = psw / 2 + PET_HIT_MARGIN, hzH = psh / 2 + PET_HIT_MARGIN;
-    bool onPetZone = Rect{ bodyCx - hzW, bodyCy - hzH, hzW * 2, hzH * 2 }.contains(tx_, ty_);
+    // The zone is WORLD-space (it is the creature's body), the finger is SCREEN-space:
+    // map the finger into the world before testing. At identity this is a no-op.
+    bool onPetZone = Rect{ bodyCx - hzW, bodyCy - hzH, hzW * 2, hzH * 2 }
+                         .contains((int)lroundf(cam_.wx(tx_)), (int)lroundf(cam_.wy(ty_)));
     const bool frozen = pet.frozen();           // care freeze: nothing here reaches the creature
     bool interactive = p.stage != STAGE_EGG && !p.lightsOff && !pet.touchBlocked() && !frozen;
     bool overPet = interactive && onPetZone;    // can actually pet/poke
     overPet_ = overPet;
-    bool justPressed  = down_ && !wasDown_;
+    // THE one test for "this touch is the creature's to answer". Two things can take it
+    // away: a pinch (whose stray leftover finger must stay inert), and a press the HUD has
+    // already consumed -- the petting zone is WORLD space, so once zoomed in it projects
+    // out over the screen-space action bar, and without this a single tap down there would
+    // both press a button and poke the pet. Every consumer below goes through it, so a new
+    // one can't quietly miss a case the way three parallel `!pinching` guards invited.
+    // The toy takes the touch before the creature does. The finger is mapped INTO world space,
+    // the same way the petting zone does it above, so nothing here needs zoom scaling.
+    const char* outToyId = app().room.toy();
+    const int   outToy   = (outToyId && outToyId[0]) ? app().items.indexOf(outToyId) : -1;
+    const bool  tossToy  = outToy >= 0 && app().items.at(outToy).play == PLAY_TOSS;
+
+    // A ball has to be placed the first time it is put out, and re-placed if the toy changes.
+    if (tossToy && !ballReady_) { ball_.place(TOY_WX); ballReady_ = true; }
+    if (!tossToy && ballReady_) { ballReady_ = false; }
+
+    if (outToy >= 0 && !pinching) {
+        const Item& toy = app().items.at(outToy);
+        const float fwx = cam_.wx(tx_), fwy = cam_.wy(ty_);
+
+        if (tossToy) {
+            // Drag and flick. The grab keeps the finger-to-ball offset so the ball does not
+            // jump to the fingertip, and holding it keeps the touch consumed for the whole
+            // gesture -- otherwise releasing over the creature would also poke it.
+            if (down_ && !wasDown_ && !tapConsumed_ && ball_.contains(fwx, fwy, (float)PET_FEET)) {
+                ball_.grab(fwx, fwy, (float)PET_FEET);
+                tapConsumed_ = true;
+            } else if (down_ && ball_.held) {
+                ball_.drag(fwx, fwy, (float)PET_FEET, dt);
+                tapConsumed_ = true;
+            } else if (!down_ && ball_.held) {
+                ball_.release();
+                tapConsumed_ = true;
+            }
+        } else if (down_ && !wasDown_ && !tapConsumed_) {
+            const float dx = fwx - TOY_WX, dy = fwy - ((float)PET_FEET - TOY_R);
+            const float r  = TOY_R + 6.0f;                 // slack: it is a small target
+            if (dx * dx + dy * dy <= r * r) {
+                if (pet.playWithToy(toy.drift, toy.happiness)) {
+                    toyPlayT_ = TOY_PLAY_TIME;
+                    anim_.react(Anim::Happy, TOY_PLAY_TIME);
+                } else {
+                    refuseTimer_ = REFUSE_TIME;
+                }
+                tapConsumed_ = true;
+            }
+        }
+    }
+
+    const bool touchFree = !pinching && !tapConsumed_;
+    bool justPressed  = down_ && !wasDown_ && touchFree;
     bool justReleased = !down_ && wasDown_;
 
     // Pose layers: sim state drives the persistent base; short-lived events overlay it.
@@ -219,11 +320,17 @@ void SceneHome::update(float dt)
     // Aged gait (docs/death-and-lifespan.md §4): stretching the footfall period is the one
     // lever that slows the walk coherently -- ground travel derives from the step phase
     // (engine/walk.hpp), so gait and speed slow together. Presentation only, by design.
+    // Kept as a named base rather than written straight into the animation, because the ball
+    // chase further compresses it below. Multiplying the LIVE value there instead would only
+    // be correct while this happened to run first, and would collapse to the floor the moment
+    // the two were reordered.
+    float gaitBase;
     {
         LifeTrack lt = pet.lifeTrack();
         const VitalsTuning& T = vitals_tuning();
-        anim_.setStepSecs(ANIM_STEP_SECS * (lt == LIFE_TWILIGHT ? T.twilightStepMult
-                                          : lt == LIFE_ELDERLY  ? T.elderlyStepMult : 1.0f));
+        gaitBase = ANIM_STEP_SECS * (lt == LIFE_TWILIGHT ? T.twilightStepMult
+                                   : lt == LIFE_ELDERLY  ? T.elderlyStepMult : 1.0f);
+        anim_.setStepSecs(gaitBase);
     }
     if (pet.checkAte()) anim_.react(Anim::Eat, 2.4f);   // fed from SceneFeed; play it on arrival
 
@@ -240,7 +347,8 @@ void SceneHome::update(float dt)
     if (justPressed && overPet && pet.isUpset()) refuse();
 
     if (justPressed) {
-        // arm a gesture only if the touch begins on the creature (and it accepts touch)
+        // arm a gesture only if the touch begins on the creature (and it accepts touch);
+        // touchFree above has already excluded pinches and presses the HUD took
         touchActive_ = overPet && !pet.isUpset();
         touchDur_ = 0; rubDist_ = 0; rubProgress_ = 0;
         prevx_ = tx_; prevy_ = ty_;
@@ -313,10 +421,48 @@ void SceneHome::update(float dt)
     //     the clearest possible statement that the world is paused.
     // The two are separate because showing the walk pose and being allowed to cover ground
     // are different questions: the first is the animation's business, the second the scene's.
-    bool touched    = touchActive_ || (down_ && overPet);
+    bool touched    = touchActive_ || (touchFree && down_ && overPet);
     bool stepping   = anim_.walkCycle();
     bool travelling = p.stage != STAGE_EGG && !touched && !pet.isUpset() && !frozen;
-    walk_.update(dt, stepping, travelling, anim_.stepPhase());
+    // --- ball play ---------------------------------------------------------------------
+    // The creature runs a ball down, bats it, and goes after it again. Chasing takes over the
+    // wander director's DIRECTION only; the speed comes from compressing the footfall period,
+    // so the legs move as fast as the body does (see walk.hpp).
+    bool chasing = false;
+    if (ballReady_ && ball_.live && travelling && !ball_.held) {
+        ball_.update(dt, walk_.minSpan(), walk_.maxSpan());
+        if (ball_.live) {
+            chasing = true;
+            walk_.chase(ball_.x);
+            // Bat it away once close enough AND it has settled -- swiping at a ball still
+            // flying past would let the creature volley it without ever running for it.
+            if (ball_.withinReach(walk_.x())) {
+                ball_.batFrom(walk_.x());
+                hopTimer_ = POKE_HOP_TIME;
+                sfx::play(sfx::kPet, 0.5f);
+                // Metered: a rally is dozens of bats, and paying drift for each would make a
+                // ball the fastest personality farm in the game.
+                if (ballRewardCd_ <= 0.0f) {
+                    const int ti = app().items.indexOf(app().room.toy());
+                    if (ti >= 0 && pet.playWithToy(app().items.at(ti).drift,
+                                                   app().items.at(ti).happiness)) {
+                        anim_.react(Anim::Happy, POKE_HOP_TIME);
+                        ballRewardCd_ = PLAY_COOLDOWN;
+                    }
+                }
+            }
+        }
+    } else if (ballReady_ && !ball_.held) {
+        ball_.update(dt, walk_.minSpan(), walk_.maxSpan());
+    }
+    if (!chasing) walk_.clearTarget();
+    if (ballRewardCd_ > 0.0f) ballRewardCd_ -= dt;
+
+    // Running compresses the footfall period, from the gait base rather than from whatever
+    // the period happens to be this frame.
+    anim_.setStepSecs(chasing ? gaitBase * BALL_RUN_MULT : gaitBase);
+
+    walk_.update(dt, stepping, travelling, anim_.stepPhase(), anim_.stepSecs());
     anim_.face(walk_.facingRight());   // DMC sprites face left, so mirror == walking right
 
     // Idle flourish: when the wander director stops the creature, it sometimes strikes a pose
@@ -420,15 +566,18 @@ void SceneHome::render()
     const PetState& p = pet.state();
     const bool frozen = pet.frozen();
 
-    // background
-    fb.fillRect(0, 0, GAME_W, HORIZON, col::sky);
+    // background -- WORLD drawing from here down to the HUD panel: everything goes through
+    // cam_ (docs/camera.md), so a pinch zoom scales and pans it while the HUD holds still.
+    // With the camera at identity these render exactly as they did before it existed.
+    gfx_fill_rect_world(cam_, 0, 0, GAME_W, HORIZON, col::sky);
     // ground: a row of grass tiles at the horizon, dirt tiles filling below
-    gfx_tile_region(0, HORIZON, GAME_W, TILE_H, grass_tile, TILE_W, TILE_H);
-    gfx_tile_region(0, HORIZON + TILE_H, GAME_W, GAME_H - HORIZON - TILE_H, dirt_tile, TILE_W, TILE_H);
+    gfx_tile_region_world(cam_, 0, HORIZON, GAME_W, TILE_H, grass_tile, TILE_W, TILE_H);
+    gfx_tile_region_world(cam_, 0, HORIZON + TILE_H, GAME_W, GAME_H - HORIZON - TILE_H,
+                          dirt_tile, TILE_W, TILE_H);
 
     // poop blobs on the ground
     for (int i = 0; i < p.poop; i++)
-        draw_poop(34 + i * 44, HORIZON + 34);
+        draw_poop(cam_, 34 + i * 44, HORIZON + 34);
 
     // pet: egg vs hatched. Gentle idle bob, a quick hop when poked, and a
     // side-to-side "no" head-shake when refusing an action.
@@ -448,57 +597,94 @@ void SceneHome::render()
     LGFX_Sprite* spr = app().creatures.frame(pet.creatureIndex(), anim_.frame());   // lazy-loaded + cached
     int psh = spr ? spr->height() : SPRITE_H;
     int cy = feet - psh / 2;                                    // body center (for ring/hearts/markers)
-    if (spr) gfx_blit_sprite_bottom(spr, cx, feet, SPRITE_TRANSP, anim_.mirrored());
-    else     gfx_blit(SPR_FALLBACK, cx, feet - SPRITE_H / 2);   // 48px "?" fallback, feet-anchored
+    // The toy that is out, drawn on the ground BEFORE the creature so it walks in front of
+    // it. Primitives from the item colour rather than a sprite: costs no art, and swaps for
+    // one later without touching any of this logic (docs/economy-and-inventory.md 6).
+    const char* toyId = app().room.toy();
+    const int   toyIdx = (toyId && toyId[0]) ? app().items.indexOf(toyId) : -1;
+    if (toyIdx >= 0 && app().items.at(toyIdx).play == PLAY_TOSS && ballReady_) {
+        ball_.draw(cam_, (float)PET_FEET, app().items.at(toyIdx).color);
+    } else if (toyIdx >= 0) {
+        const Item& toy = app().items.at(toyIdx);
+        const float bounce = toyPlayT_ > 0.0f ? -10.0f * (toyPlayT_ / TOY_PLAY_TIME) : 0.0f;
+        const float ty = (float)PET_FEET - TOY_R + bounce;
+        switch (toy.shape) {
+            case SHAPE_SQUARE:
+            case SHAPE_SOFT:
+                gfx_fill_rect_world(cam_, TOY_WX - TOY_R, ty - TOY_R,
+                                    TOY_R * 2.0f, TOY_R * 2.0f, toy.color);
+                break;
+            case SHAPE_BAR:
+                gfx_fill_rect_world(cam_, TOY_WX - TOY_R, ty - TOY_R * 0.45f,
+                                    TOY_R * 2.0f, TOY_R * 0.9f, toy.color);
+                break;
+            default:
+                gfx_fill_circle_world(cam_, TOY_WX, ty, (float)TOY_R, toy.color);
+                gfx_draw_circle_world(cam_, TOY_WX, ty, (float)TOY_R, col::black);
+                break;
+        }
+    }
+
+    if (spr) gfx_blit_sprite_bottom_world(cam_, spr, cx, feet, SPRITE_TRANSP, anim_.mirrored());
+    else     gfx_blit_world(cam_, SPR_FALLBACK, cx, feet - SPRITE_H / 2);   // 48px "?" fallback, feet-anchored
 
     // Rub-progress ring: shown while ringHold_ is armed (a live rub, plus its tail -- update()).
     // Pink fill = progress to the next happiness chunk. The fill colour is CONSTANT: it used
     // to dim on any frame the finger wasn't moving, and since a rub has micro-pauses (plus a
     // 1px deadzone) that read as a fast flicker rather than as feedback.
     if (ringHold_ > 0.0f) {
-        fb.fillArc(cx, cy, 30, 35, 0, 360, rgb565(50, 52, 62));
+        gfx_fill_arc_world(cam_, cx, cy, 30, 35, 0, 360, rgb565(50, 52, 62));
         float p = rubProgress_ / PET_CHUNK_DIST;
         if (p > 1.0f) p = 1.0f;
         if (p > 0.0f)
-            fb.fillArc(cx, cy, 30, 35, 0, (int)(p * 360.0f), rgb565(255, 120, 160));
+            gfx_fill_arc_world(cam_, cx, cy, 30, 35, 0, (int)(p * 360.0f), rgb565(255, 120, 160));
     }
 
     // Petting reward: hearts linger for the cooldown.
     if (playCooldown_ > 0.0f) {
         const uint16_t pink = rgb565(255, 120, 160);
-        draw_heart(cx - 24, cy - 40, 8, pink);
-        draw_heart(cx + 22, cy - 48, 6, pink);
-        draw_heart(cx,      cy - 58, 7, pink);
+        draw_heart(cam_, cx - 24, cy - 40, 8, pink);
+        draw_heart(cam_, cx + 22, cy - 48, 6, pink);
+        draw_heart(cam_, cx,      cy - 58, 7, pink);
     }
     // Poke reward: sparkles burst when a poke run completes.
     if (sparkTimer_ > 0.0f) {
         const uint16_t spark = rgb565(255, 230, 80);
-        fb.fillCircle(cx - 26, cy - 30, 3, spark);
-        fb.fillCircle(cx + 26, cy - 34, 3, spark);
-        fb.fillCircle(cx + 4,  cy - 52, 3, spark);
+        gfx_fill_circle_world(cam_, cx - 26, cy - 30, 3, spark);
+        gfx_fill_circle_world(cam_, cx + 26, cy - 34, 3, spark);
+        gfx_fill_circle_world(cam_, cx + 4,  cy - 52, 3, spark);
     }
+
+    // The cues from here down are "nameplates": they belong to the creature but stay at a
+    // fixed SCREEN size (the text renderer only does integer sizes, and a 2x-zoomed badge
+    // would just be blur) -- so they hang off the creature's PROJECTED position and keep
+    // today's pixel offsets. At identity these equal cx / cy / the head top exactly.
+    int scx = (int)lroundf(cam_.sx((float)cx));           // creature center, screen space
+    int scy = (int)lroundf(cam_.sy((float)cy));
+    int shd = (int)lroundf(cam_.sy((float)(feet - psh))); // head top, screen space
 
     // status markers ("SICK"/"VERY SICK"/"HURT"/... -- see condition_marker)
     if (const char* cm = pet.conditionMarker())
-        gfx_text(clamp_left(cx - 20, (int)strlen(cm) * 12), cy - 42, 2, col::warn, "%s", cm);
-    if (p.lightsOff) gfx_text(clamp_left(cx + 20, 36), cy - 36, 2, col::white, "Zzz");
+        gfx_text(clamp_left(scx - 20, (int)strlen(cm) * 12), scy - 42, 2, col::warn, "%s", cm);
+    if (p.lightsOff) gfx_text(clamp_left(scx + 20, 36), scy - 36, 2, col::white, "Zzz");
 
     // Speech bubble: the creature has something to say. Deliberately PERSISTENT -- it doesn't
     // time out and vanish, so the payoff for a high bond can't be missed by looking away.
     // Sits to the RIGHT of the head (the attention badge takes the left), and the rect is
     // stashed for onInput since it moves with the sprite's height.
-    // The debug overlay (drawn last) owns y48..98 when enabled; the bubble and the badge
-    // must clamp BELOW it or they'd be painted over while their hit-rects kept eating taps.
-    const int cueMinY = app().debugOverlay ? 102 : 48;
+    // The debug overlay (drawn last) owns the band below the HUD when enabled; the bubble
+    // and the badge must clamp BELOW it or they'd be painted over while their hit-rects
+    // kept eating taps.
+    const int cueMinY = app().debugOverlay ? DBG_Y + DBG_H + 4 : DBG_Y;
 
     // Hidden while frozen as well as while asleep: a conversation moves bond, mood and
     // personality, so offering one would contradict the pause. It keeps its place and is
     // still waiting on the way out.
     bubble_ = Rect{ 0, 0, 0, 0 };
     if (app().conversations.pending() && !p.lightsOff && !frozen) {
-        int by = feet - psh - 26;
+        int by = shd - 26;
         if (by < cueMinY) by = cueMinY;            // never ride up into the HUD panel/overlay
-        Rect b{ cx + 24, by, 46, 30 };
+        Rect b{ scx + 24, by, 46, 30 };
         if (b.x + b.w > GAME_W - 4) b.x = GAME_W - 4 - b.w;
         bubble_ = b;
         b.fill(col::white, 8);
@@ -520,9 +706,9 @@ void SceneHome::render()
     // The freeze marker shares the slot but ignores the asleep/egg guard: those states are
     // themselves suspended, so the pause is the more important thing to say about either.
     if (frozen || (!p.lightsOff && p.stage != STAGE_EGG)) {
-        int by = feet - psh - 10;                  // above the head, whatever the sprite size
+        int by = shd - 10;                         // above the head, whatever the sprite size
         if (by < cueMinY + 6) by = cueMinY + 6;    // ...but never riding up into the HUD/overlay
-        int bx = clamp_centre(cx - 44, 14);        // beside the head, but never off the edge
+        int bx = clamp_centre(scx - 44, 14);       // beside the head, but never off the edge
         if (frozen) {
             draw_frozen(bx, by);
         } else if (pet.isUpset()) {
@@ -596,7 +782,7 @@ void SceneHome::render()
     // runtime debug overlay (toggle in Settings): touch internals + sim state.
     // Drawn over the sky just below the HUD (above the pet) so it clips nothing.
     if (app().debugOverlay) {
-        fb.fillRect(0, 48, GAME_W, 50, rgb565(0, 0, 0));
+        fb.fillRect(0, DBG_Y, GAME_W, DBG_H, rgb565(0, 0, 0));
         gfx_text(4, 50, 1, col::good, "down%d over%d act%d xy%d,%d w%d%s",
                  down_, overPet_, touchActive_, tx_, ty_,
                  (int)walk_.x(), !walk_.walking() ? "." : walk_.facingRight() ? ">" : "<");
@@ -617,17 +803,40 @@ void SceneHome::render()
         gfx_text(4, 86, 1, col::good, "vit%.0f ema%.2f cond%u t%.0fm",
                  pet.vitals().vitality, pet.vitals().careEma,
                  p.cond, pet.vitals().condSecs / 60.0f);
+        // camera + multitouch internals (read next to the FPS number app.cpp draws)
+        gfx_text(4, 98, 1, col::good, "cam z%.2f p%d xy2 %d,%d %s",
+                 cam_.zoom(), in_.points, in_.x2, in_.y2,
+                 pinch_.engaged() ? "PINCH" : "");
     }
 }
 
 void SceneHome::onInput(const Input& in)
 {
+    in_ = in;      // full snapshot for the pinch recognizer (fed to it in update())
     down_ = in.down;
     tx_ = in.x;
     ty_ = in.y;
+    // The HUD's claim on a press lasts exactly as long as that press. Cleared on the way
+    // up rather than on the next press edge, because the press debounce can swallow a
+    // quick re-tap's edge -- which would otherwise inherit the previous tap's verdict.
+    if (!in.down) tapConsumed_ = false;
+    // A pinch owns the touch outright: while two fingers are down -- and through the tail
+    // of the gesture, until the LAST finger lifts -- no tap may fire. (What this can't
+    // catch: a pinch whose first finger lands on a button, because that press-edge tap has
+    // already fired before a second finger exists. Pinches start over the scene in
+    // practice, so that stays accepted rather than adding a tap delay to every button.)
+    if (in.points >= 2 || pinch_.engaged()) return;
     // Creature poke/pet gestures are resolved in update(); here we handle the taps
     // on the top-right menu button and the bottom action bar.
     if (!in.pressed) return;
+    // Record that this press belongs to a screen-space control before dispatching it --
+    // update() needs to know, because its petting zone is world-space and at zoom can
+    // cover the same pixels (see touchFree there). Recomputed at every press edge, so it
+    // never outlives the press that set it.
+    tapConsumed_ = (app().conversations.pending() && bubble_.w > 0 && bubble_.contains(in))
+                || MENU_HIT.contains(in);
+    for (int i = 0; i < ACT_N && !tapConsumed_; i++)
+        if (act_rect(i).contains(in)) tapConsumed_ = true;
     // Checked before the pet gestures: tapping the bubble must open the conversation, not
     // register as a poke. Handling it here (onInput runs before update) means the gesture
     // logic never sees the touch, because the scene has already changed.

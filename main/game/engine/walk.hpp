@@ -58,23 +58,59 @@ public:
         else          { x_ = x_ < minX_ ? minX_ : (x_ > maxX_ ? maxX_ : x_); }
     }
 
+    // --- chasing -------------------------------------------------------------------------
+    // Head for a spot instead of wandering, for as long as the caller keeps asking. Only the
+    // DIRECTION is taken over: the stride, the speed and the bob still come from the walk
+    // cadence, so a creature chasing a ball moves exactly as fast as one ambling and the feet
+    // cannot skate. The wander director is suspended meanwhile (no rests, no random turns)
+    // and resumes untouched the moment the target is cleared.
+    void chase(float x) { target_ = x; chasing_ = true; }
+    void clearTarget()  { chasing_ = false; }
+    bool chasing() const { return chasing_; }
+
+    // Close enough to have arrived. One stride of tolerance, because travel is quantised to
+    // the cadence -- asking for exactness would leave the creature jittering either side of
+    // the target forever.
+    bool atTarget() const { return chasing_ && fabsf(x_ - target_) <= WALK_STRIDE; }
+
     // `stepping`   = the walk cycle is the pose on screen at all (a nap / sick / eating /
     //                refusing creature is showing something else, and must not be walked).
     // `travelling` = the creature is also ALLOWED to cover ground (not an egg, not being
     //                petted, not sulking).
     // Both must hold for the wander director to run, so a sleeping or upset creature neither
     // paces nor strikes poses.
-    void update(float dt, bool stepping, bool travelling, float stepPhase)
+    // `stepSecs` is the animation's LIVE footfall period. Travel is WALK_STRIDE per footfall
+    // by definition, so passing the live value is what makes the speed follow the gait: stretch
+    // it for age and the creature ambles, compress it to run and it sprints, and in both cases
+    // the legs and the ground cover the same distance per frame. Deriving this from the
+    // ANIM_STEP_SECS *constant* instead -- as it did originally -- meant a retimed gait moved
+    // its legs at one speed and its body at another, which is exactly the skate the invariant
+    // above exists to prevent. It was already visible on elderly creatures.
+    void update(float dt, bool stepping, bool travelling, float stepPhase, float stepSecs)
     {
+        const float speed = WALK_STRIDE / (stepSecs > 0.05f ? stepSecs : 0.05f);
         bool footfall = stepPhase < phase_;      // phase wraps to 0 exactly on a frame change
         phase_ = stepPhase;
         bool active = stepping && travelling;
+
+        if (chasing_) {
+            // A creature that cannot travel still cannot move, chase or no chase -- the same
+            // gate as wandering, so being asleep or upset stops the game rather than being a
+            // special case the caller has to remember.
+            walking_ = active && !atTarget();
+            if (!walking_) return;
+            dir_ = (target_ > x_) ? 1 : -1;
+            x_ += dir_ * speed * dt;
+            if (x_ < minX_) x_ = minX_;
+            if (x_ > maxX_) x_ = maxX_;
+            return;
+        }
 
         if (active && footfall && --actSteps_ <= 0) nextAct();
         walking_ = active && !resting_;
         if (!walking_) return;
 
-        x_ += dir_ * (WALK_STRIDE / ANIM_STEP_SECS) * dt;
+        x_ += dir_ * speed * dt;
         // Reaching the edge of the walkable ground turns the creature AND buys it a rest, so
         // it reads as "got to the fence, had a look, wandered back" rather than as a sprite
         // bouncing off an invisible wall.
@@ -86,6 +122,10 @@ public:
     }
 
     float x() const           { return x_; }
+    // The walkable span, so anything else that lives on this ground (a ball) can be kept
+    // inside the same bounds the creature can actually reach.
+    float minSpan() const     { return minX_; }
+    float maxSpan() const     { return maxX_; }
     bool  facingRight() const { return dir_ > 0; }
     bool  walking() const     { return walking_; }
     bool  resting() const     { return resting_; }
@@ -148,5 +188,7 @@ private:
     bool  resting_  = false;
     bool  restCue_  = false;
     bool  walking_  = false;   // advancing along the ground (also gates the bob)
+    bool  chasing_  = false;   // heading for target_ instead of wandering (see chase())
+    float target_   = 0.0f;
     bool  placed_   = false;   // has setSpan() chosen a starting position yet
 };

@@ -39,6 +39,8 @@ static const int D_OWNED_Y  = 196;
 static const Rect D_MINUS{ PAD_X,                 218, 46, 40 };
 static const Rect D_PLUS { GAME_W - PAD_X - 46,   218, 46, 40 };
 static const Rect D_BUY  { PAD_X,                 266, GAME_W - 2 * PAD_X, 40 };
+// Bag side: one action, same footprint as BUY so the page does not jump between tabs.
+static const Rect D_USE  { PAD_X,                 266, GAME_W - 2 * PAD_X, 40 };
 
 static const char* const TABS[] = { "Shop", "Bag" };
 
@@ -395,8 +397,19 @@ void SceneShop::renderDetail()
     if (!shopping) {
         gfx_text(PAD_X, D_OWNED_Y, 2, col::white, "You have %u",
                  (unsigned)app().economy.slotAt(rows_[detailRow_].idx).count);
-        gfx_text_wrap(PAD_X, D_OWNED_Y + 28, GAME_W - 2 * PAD_X, 1, col::dim,
-                      "Using items arrives with the kinds that need it.", 2, -1, 2);
+        // Toys are the one bag kind with an action so far: put it out, or put it away.
+        if (l.kind == ITEM_TOY) {
+            const bool out = (strcmp(app().room.toy(), l.id) == 0);
+            D_USE.button(out ? "PUT AWAY" : "SET OUT",
+                         out ? rgb565(74, 92, 132) : col::accent,
+                         out ? col::white : col::black, 2);
+            gfx_text_wrap(PAD_X, D_OWNED_Y + 28, GAME_W - 2 * PAD_X, 1, col::dim,
+                          out ? "It is out in the room. Tap it there to play."
+                              : "Only one toy can be out at a time.", 2, -1, 2);
+        } else {
+            gfx_text_wrap(PAD_X, D_OWNED_Y + 28, GAME_W - 2 * PAD_X, 1, col::dim,
+                          "Medicine is used from the Heal screen.", 2, -1, 2);
+        }
         return;
     }
 
@@ -497,7 +510,17 @@ void SceneShop::onInput(const Input& in)
         // the array.
         if (detailRow_ < 0 || detailRow_ >= rowCount_) { closeDetail(); return; }
         if (!in.pressed) return;
-        if (rows_[detailRow_].type != ROW_STOCK) return;   // the Bag detail is read-only in E1
+
+        if (rows_[detailRow_].type == ROW_BAG) {          // bag side: set out / put away
+            Line l = row_line(app(), rows_[detailRow_]);
+            if (l.kind == ITEM_TOY && D_USE.contains(in)) {
+                const bool out = (strcmp(app().room.toy(), l.id) == 0);
+                app().room.setToy(out ? "" : l.id);
+                app().refreshAmbientToy();
+                sfx::play(out ? sfx::kBack : sfx::kSelect);
+            }
+            return;
+        }
 
         if (D_MINUS.contains(in)) {
             if (qty_ > 1) { qty_--; sfx::play(sfx::kTap); } else sfx::play(sfx::kDenied);

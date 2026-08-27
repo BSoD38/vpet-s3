@@ -47,6 +47,20 @@ enum DecorSlot : uint8_t {
     DSLOT_NONE = 0xFF
 };
 
+// How an item is drawn while there is no sprite art. PRESENTATION ONLY -- the same class of
+// field as `color`, so it is not the sort of case-by-case behaviour extension the E6 modding
+// pin warns about. Toys need it because four identical circles on the floor tell the player
+// nothing about which toy is out.
+enum ItemShape : uint8_t { SHAPE_ROUND = 0, SHAPE_SQUARE, SHAPE_SOFT, SHAPE_BAR };
+
+// How a toy is played with. An affordance, not an effect -- it says which control the room
+// offers, while what the play DOES is still `drift` + `happiness` for every toy alike. It
+// folds into the composable-effects rework at E6 (see the modding note above) rather than
+// being the start of a per-toy behaviour zoo.
+//   PLAY_TAP  -- tap it where it sits (the default, and every toy before the ball)
+//   PLAY_TOSS -- drag and flick it; the creature runs it down and bats it back
+enum ItemPlay : uint8_t { PLAY_TAP = 0, PLAY_TOSS };
+
 // Sentinel for "this item treats no condition" -- distinct from COND_HEALTHY, which as a
 // `treats` value would mean "cures being well".
 constexpr uint8_t TREATS_NONE = 0xFF;
@@ -82,6 +96,8 @@ struct Item {
     int16_t  happiness;          // toys: happiness granted per play
     float    drift[AX_COUNT];    // toys: personality nudge, indexed by DriftAxis
     uint8_t  slot;               // decor: DecorSlot (DSLOT_NONE otherwise)
+    uint8_t  shape;              // ItemShape: how it is drawn with no sprite
+    uint8_t  play;               // toys: ItemPlay -- which control the room offers
     uint8_t  treats;             // care: TreatTrack acted on (TREATS_NONE otherwise)
     uint8_t  potency;            // care: Potency -- one step, or a full clear of the track
     int16_t  health;             // care: HP restored (a tonic treats no condition at all)

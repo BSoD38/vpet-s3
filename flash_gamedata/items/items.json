@@ -57,5 +57,82 @@
     "cost": 500,
     "rarity": "common",
     "color": "#d4694f"
+  },
+  {
+    "id": "ball",
+    "name": "Ball",
+    "kind": "toy",
+    "desc": "Bounces high. Made for chasing.",
+    "tags": [
+      "toy",
+      "loud"
+    ],
+    "cost": 320,
+    "rarity": "common",
+    "color": "#e0503a",
+    "happiness": 8,
+    "drift": {
+      "energetic": 0.6,
+      "wild": 0.4
+    },
+    "shape": "round",
+    "play": "toss"
+  },
+  {
+    "id": "plush",
+    "name": "Plush",
+    "kind": "toy",
+    "desc": "Worn soft in all the right places.",
+    "tags": [
+      "toy",
+      "soft"
+    ],
+    "cost": 360,
+    "rarity": "common",
+    "color": "#d98fb0",
+    "happiness": 7,
+    "drift": {
+      "social": 0.6,
+      "energetic": -0.5
+    },
+    "shape": "soft"
+  },
+  {
+    "id": "puzzle_box",
+    "name": "Puzzle Box",
+    "kind": "toy",
+    "desc": "Rattles when it wants attention.",
+    "tags": [
+      "toy",
+      "quiet"
+    ],
+    "cost": 450,
+    "rarity": "common",
+    "color": "#7a6cc4",
+    "happiness": 6,
+    "drift": {
+      "energetic": -0.5,
+      "wild": -0.3
+    },
+    "shape": "square"
+  },
+  {
+    "id": "chew_rope",
+    "name": "Chew Rope",
+    "kind": "toy",
+    "desc": "Knotted, frayed, and thoroughly won.",
+    "tags": [
+      "toy",
+      "rough"
+    ],
+    "cost": 300,
+    "rarity": "common",
+    "color": "#c9a86a",
+    "happiness": 7,
+    "drift": {
+      "brave": 0.5,
+      "wild": 0.5
+    },
+    "shape": "bar"
   }
 ]

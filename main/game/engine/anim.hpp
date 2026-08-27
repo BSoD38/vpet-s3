@@ -56,6 +56,10 @@ public:
     // (same divisor as flip()). Travel derived from this cannot skate: change the frame
     // rate, the step cadence or dt and the feet still land where the ground says they do.
     float stepPhase() const          { return fmodf(t_, stepSecs_) / stepSecs_; }
+    // The LIVE footfall period. CreatureWalk derives ground travel from this rather than from
+    // the ANIM_STEP_SECS constant, so anything that retimes the legs retimes the travel with
+    // them -- that is what keeps a stretched (aged) or compressed (running) gait from skating.
+    float stepSecs() const           { return stepSecs_; }
 
     // Left-to-right flip for the blit. Nope has a single frame and animates DMC-style by
     // alternating flipped/unflipped rapidly (a head-shake); otherwise it's the walk facing.

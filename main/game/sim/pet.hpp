@@ -166,6 +166,9 @@ class Pet {
     float     idleSecs_ = 0.0f;   // REAL seconds since the last deliberate interaction (persisted)
     bool      catchingUp_ = false;   // inside boot()'s offline replay (attenuates idle drift)
     int       cuIdleNudges_ = 0;     // idle nudges already granted during this catch-up
+    const float* toyDrift_ = nullptr;   // borrowed: the out toy's drift, or null (see setAmbientToy)
+    float     toySecs_ = 0.0f;          // real seconds since the last ambient toy nudge
+    int       cuToyNudges_ = 0;         // ambient toy nudges granted during this catch-up
     bool      startedFresh_ = false;   // boot() hatched a new egg (no save was loaded)
     uint8_t   mood_ = MOOD_OK;         // PetMood; out-of-blob, per-creature
     // RTC second the treatment cooldown expires. Its own NVS key, NOT VitalsSave: bumping
@@ -198,6 +201,16 @@ public:
     // feature is simply off). Minigames call nudgeDrift() directly with their own vector,
     // the same way each already owns its stat-gain table.
     void setDriftSink(PersonalityTracker* d) { drift_ = d; }
+
+    // --- toys (docs/economy-and-inventory.md 6) -------------------------------------------
+    // The drift vector of the toy currently out, or nullptr for none. A BORROWED pointer into
+    // the item registry, set by App whenever the room changes, so the simulation layer never
+    // has to know what an Item is.
+    void setAmbientToy(const float* drift) { toyDrift_ = drift; }
+
+    // Play with the toy that is out: a deliberate interaction, so it lands at full strength
+    // and breaks the neglect streak the way petting does. Same refusals as play().
+    bool playWithToy(const float d[AX_COUNT], int happiness);
 
     // Re-assert the panel brightness after the player changes it (Settings -> SCREEN).
     // The pet is the only thing allowed to drive the backlight, because it is the only

@@ -180,6 +180,15 @@ static ConvContext conv_ctx(const Pet& pet, const PersonalityTracker& drift)
     return c;
 }
 
+void App::refreshAmbientToy()
+{
+    const char* id = room.toy();
+    int i = (id && id[0]) ? items.indexOf(id) : -1;
+    // A toy whose mod was uninstalled resolves to nothing rather than to a stale pointer --
+    // the drift vector it pointed at would belong to whatever item took that registry slot.
+    pet.setAmbientToy(i >= 0 ? items.at(i).drift : nullptr);
+}
+
 ConvContext App::convCtx() { return conv_ctx(pet, drift); }
 
 void App::setScene(SceneId id, Slide slide)
@@ -284,10 +293,12 @@ void App::init()
     foods.loadAll();                  // food list (independent of the pet; needed by the Feed picker)
     items.loadAll();                  // toys/decor/medicine; empty in the base game until E2
     economy.init(save);               // wallet + bag (own NVS keys, so a pet reset never empties it)
+    room.init(save);                  // what is out on the floor (survives death with the bag)
     personalities.loadAll();          // natures + traits, before any drift is evaluated
     drift.boot();
     conversations.init(save);         // mounts gamedata + loads facts/seen history
     pet.setDriftSink(&drift);         // BEFORE pet.boot(): offline catch-up ticks the drift too
+    refreshAmbientToy();              // ...and so does the ambient toy nudge, so set it first
     // ...and before it for a second reason: the registries above are what decide whether the
     // saved creature still exists. If it doesn't, ask rather than let boot() quietly rewrite
     // it to an egg and save that. Returns only if the player chooses to start over.

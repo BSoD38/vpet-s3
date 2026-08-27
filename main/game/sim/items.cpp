@@ -56,6 +56,20 @@ static uint8_t parse_treats(const char* s)
     return TREATS_NONE;
 }
 
+static uint8_t parse_play(const char* s)
+{
+    if (strcasecmp(s, "toss") == 0) return PLAY_TOSS;
+    return PLAY_TAP;                        // default, and the fallback for a typo
+}
+
+static uint8_t parse_shape(const char* s)
+{
+    if (strcasecmp(s, "square") == 0) return SHAPE_SQUARE;
+    if (strcasecmp(s, "soft")   == 0) return SHAPE_SOFT;
+    if (strcasecmp(s, "bar")    == 0) return SHAPE_BAR;
+    return SHAPE_ROUND;                     // the default, and the fallback for a typo
+}
+
 static uint8_t parse_potency(const char* s)
 {
     if (!s[0] || strcasecmp(s, "step") == 0) return POTENCY_STEP;   // the default
@@ -123,6 +137,12 @@ void ItemRegistry::parseEntry(cJSON* root, Item& it)
 
     gd_str(root, "treats", buf, sizeof buf, "");
     it.treats = buf[0] ? parse_treats(buf) : TREATS_NONE;
+
+    gd_str(root, "shape", buf, sizeof buf, "");
+    it.shape = parse_shape(buf);
+
+    gd_str(root, "play", buf, sizeof buf, "");
+    it.play = parse_play(buf);
 
     gd_str(root, "potency", buf, sizeof buf, "");
     it.potency = parse_potency(buf);
