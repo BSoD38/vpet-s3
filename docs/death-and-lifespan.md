@@ -108,6 +108,16 @@ Two thresholds, both **presentation-only** (rule 2):
 - **Twilight** (< 3% ≈ ~2 weeks): farewell-flavoured conversation content unlocks. The player
   knows.
 
+**The aged gait only started working properly in E3.** Stretching the footfall period is meant to
+be the one lever that slows the walk coherently — ground travel derives from the step cadence, so
+gait and speed slow together. It did not: `CreatureWalk` computed travel from the `ANIM_STEP_SECS`
+*constant* while `CreatureAnim` carried a live, stretched period, so an elderly creature moved its
+legs slower while covering ground at full speed. That is exactly the skate
+[`walk.hpp`](../main/game/engine/walk.hpp)'s invariant exists to prevent, and this document
+asserted it was handled from the day D1 shipped. The walk now takes the live period, so anything
+that retimes the legs retimes the ground with them — which is also what lets a creature *run*
+after a ball ([economy-and-inventory.md §6](economy-and-inventory.md)).
+
 At zero on this track, the pet is at the brink: the **deathbed conversation** (§6) fires if one
 is eligible, otherwise the plain brink scene — held for the player's presence exactly like
 Critical.

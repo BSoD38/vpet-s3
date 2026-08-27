@@ -1,7 +1,8 @@
 # Economy & Inventory
 
-Status: **E1 and E2 built** (wallet, shop, bag, items, medicine, the pet-less shift). Formerly the "Economy — money / shop / items" entry
-in [roadmap.md](roadmap.md).
+Status: **E1–E3 built** — wallet, shop, bag, item registry, medicine, the pet-less shift, and
+toys including the throwable ball. Formerly the "Economy — money / shop / items" entry in
+[roadmap.md](roadmap.md).
 
 The currency is **Bits**. This doc covers where they come from, what they buy, the inventory
 that holds it, and the wish/gift loop that ties the bag to the conversation system.
@@ -283,19 +284,69 @@ fixtures and any mod written against the current schema keep working.
 
 ## 6. Toys — the play channel
 
-Durable, one "out" at a time, visible in the room. Home's play action uses whatever is out, which
-gives `PLAY_AFFECTION` / `PLAY_ROUGH` ([`pet.hpp`](../main/game/sim/pet.hpp)) a real vocabulary
-instead of two verbs.
+Durable, **one out at a time**, and visible on the floor of the room. Which toy is out lives in
+[`sim/room.hpp`](../main/game/sim/room.hpp) — what the player has *put out*, as distinct from what
+they own (§11) or what the creature is. Decor slots (§7) join it there at E5, which is why the
+room is its own type rather than a field on `Economy`: the room and the wallet are different
+ideas. It survives death with the bag.
 
-| Toy | Reads as | Drift |
-| --- | --- | --- |
-| Ball | boisterous | `energetic +`, `wild +` |
-| Plush | comforting | `social +`, `energetic −` |
-| Puzzle box | thoughtful | `energetic −`, `wild −` |
-| Chew rope | rough-and-tumble | `brave +`, `wild +` |
+| Toy | Reads as | Drift | Price |
+| --- | --- | --- | --- |
+| Ball | boisterous | `energetic +`, `wild +` | 320 |
+| Chew rope | rough-and-tumble | `brave +`, `wild +` | 300 |
+| Plush | comforting | `social +`, `energetic −` | 360 |
+| Puzzle box | thoughtful | `energetic −`, `wild −` | 450 |
 
 Toys **never wear out**. The sink is wanting several for different drifts; wear-out would turn an
 expression channel into a maintenance chore.
+
+### A toy shapes the creature two ways
+
+**Ambient** — a slow nudge (every 45 min, at 35% strength) simply for being out. It is a standing
+choice, so it must never out-argue the things the player actively does.
+
+**Deliberate** — playing with it lands at full strength, plus happiness.
+
+Two constraints the ambient half has to respect, both learned the hard way:
+
+- It does **not** go through `Pet::nudgeDrift()`, which resets `idleSecs_` to mark a deliberate
+  interaction. Routing it there would mean a toy left on the floor **permanently suppressed the
+  neglect clock** — leaving one out would silently cancel the consequence of ignoring the
+  creature. It writes to the drift tracker directly, and is skipped while the creature sleeps.
+- It is **capped during offline catch-up**, exactly as idle drift already is, so a week in a
+  drawer does not deliver a week of toy drift. The replay is a catch-up, not a fast-forward.
+
+### The ball is a game of catch
+
+Most toys are a tap where they sit. The ball
+([`toy_ball.hpp`](../main/game/scenes/care/toy_ball.hpp)) is a **2-D projectile**: pick it up, throw it in any direction, watch it bounce. The creature runs
+it down, bats it away and chases again.
+
+- The bat is always biased **away** from the creature, so a hit starts another chase instead of
+  trapping the ball underfoot.
+- It can only reach a ball that is **near along the ground *and* low**, so a lob genuinely differs
+  from a roll.
+- After a few seconds of stillness the creature loses interest, so a forgotten ball cannot hold it
+  hostage in a corner.
+- It spins by rolling-without-slipping, drawn as two orbiting spots — a plain sphere cannot show
+  rotation without a marking.
+
+**Throw speed is smoothed over ~70 ms rather than read from the final frame.** Touch panels repeat
+their last coordinate as the finger lifts, so the instantaneous delta at release is very often
+exactly zero: the first version dropped the ball straight down however hard it was flicked.
+
+**Running is a compressed footfall period, not a speed multiplier.** Travel is one stride per
+footfall by definition ([`walk.hpp`](../main/game/engine/walk.hpp)), so speeding the legs and the
+ground separately is precisely the skate that file's invariant exists to prevent. See the note in
+[death-and-lifespan.md §4](death-and-lifespan.md) — the same change fixed the aged gait, which
+had the bug in the opposite direction.
+
+### Two schema fields, both presentation
+
+`shape` (`round`/`square`/`soft`/`bar`) decides how a toy is drawn while there is no sprite art —
+without it, four toys are four identical circles. `play` (`tap`/`toss`) decides which control the
+room offers. Neither is an *effect*: what play does is still `drift` + `happiness` for every toy
+alike, so they are not the per-toy behaviour zoo the modding note in §5.1 warns about.
 
 ## 7. Room decor
 
@@ -463,7 +514,7 @@ Every number in this doc is a first guess and expects to move with playtesting.
 | --- | --- |
 | **E1** | Wallet, `ItemRegistry`, `SceneShop` + `SceneBag`, food stock + inline buy, income from minigames and battles. *The loop closes here.* |
 | **E2** | **Medicine (§4) *and* the pet-less minigame, in the same phase** — priced treatment never ships without its floor. See below. |
-| **E3** | Toys — drift channel, one toy out, play-with-toy on Home. |
+| **E3** | ~~Toys — drift channel, one toy out, play-with-toy on Home.~~ **Done**, plus ambient drift and the throwable ball (§6). |
 | **E4** | Wish→gift loop, the six conversation hooks, `conv_lint` item cross-referencing. |
 | **E5** | Room decor — slots, home-scene background layers, sprites. |
 | **E6** | Evolution catalyst; Token of Amends; memorial keepsake on death. **Plus the modding rework in §5.1** — the item schema stops being five fixed buckets and becomes composable effects. |
