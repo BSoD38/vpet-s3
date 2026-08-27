@@ -362,6 +362,7 @@ in a fixed-size reservoir:
 ```
 for each pool:
     for each candidate record:
+        skip it outright if it is the conversation that was played LAST
         evaluate `when` against current pet/personality/facts state
         if eligible: offer it to a fixed K-slot reservoir (K = 8), ranked by
                      pool specificity, then priority, then unseen-one-shot first
@@ -369,7 +370,17 @@ pick weighted-randomly among the survivors   → variety, no "always the same gr
 ```
 
 RAM cost: `K × sizeof(candidate)` ≈ a few hundred bytes, **independent of library size**. A
-repeatable small-talk pool guarantees the reservoir is never empty, so the pet is never mute.
+repeatable small-talk pool keeps the reservoir stocked, so the pet is rarely mute.
+
+The **last-played exclusion** is what stops the weighted roll degenerating. Eligibility is often
+narrow — an `hourMin`/`hourMax` window late at night can leave a single candidate standing — and
+the roll then re-picks that one line every cooldown until the gate closes. Excluding it during the
+scan (rather than suppressing the bubble at the end) means a different conversation takes the slot
+whenever one exists; only when the repeat is genuinely the sole candidate does the pet stay quiet.
+The id hash is persisted next to the cooldown, so a reboot cannot hand back the line it just said.
+A declined one-shot is still re-offered — you may not have been ready to answer — but declined
+chatter is not. Triggered searches (`triggeredStep`, e.g. the deathbed farewell) are exempt: there,
+the authored line for the moment beats variety.
 
 ### 5.2 Index — an I/O optimization, never a requirement
 
